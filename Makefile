@@ -1,4 +1,5 @@
-.PHONY: help run dev test test-v lint fmt db-up db-down db-logs ui-dev ui-build ui-codegen
+.PHONY: help run dev test test-v lint fmt db-up db-down db-logs ui-dev ui-build ui-codegen \
+        stack-up stack-down stack-restart stack-logs
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -23,13 +24,13 @@ fmt: ## Auto-format code with ruff
 	uv run ruff check --fix src/ tests/
 
 db-up: ## Start MongoDB via Podman
-	podman compose -f podman/compose.yml up -d
+	podman-compose -f podman/compose.yml up -d
 
 db-down: ## Stop MongoDB
-	podman compose -f podman/compose.yml down
+	podman-compose -f podman/compose.yml down
 
 db-logs: ## Show MongoDB logs
-	podman compose -f podman/compose.yml logs -f
+	podman-compose -f podman/compose.yml logs -f
 
 ui-dev: ## Start UI dev server
 	cd ui && npm run dev
@@ -39,3 +40,15 @@ ui-build: ## Build UI for production
 
 ui-codegen: ## Regenerate GraphQL types from server schema
 	cd ui && npx graphql-codegen
+
+stack-up: ## Build images and start full stack — UI on http://localhost:8080, API at /api/
+	podman-compose -f podman/compose.full.yml up -d --build
+
+stack-down: ## Stop and remove the full stack containers
+	podman-compose -f podman/compose.full.yml down
+
+stack-restart: ## Restart all full stack containers
+	podman-compose -f podman/compose.full.yml restart
+
+stack-logs: ## Stream logs from the full stack
+	podman-compose -f podman/compose.full.yml logs -f
