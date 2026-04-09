@@ -1,4 +1,4 @@
-.PHONY: help run dev test test-v lint fmt db-up db-down db-logs
+.PHONY: help run dev test test-v lint fmt db-up db-down db-logs ui-dev ui-build ui-codegen
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -30,3 +30,12 @@ db-down: ## Stop MongoDB
 
 db-logs: ## Show MongoDB logs
 	podman compose -f podman/compose.yml logs -f
+
+ui-dev: ## Start UI dev server
+	cd ui && npm run dev
+
+ui-build: ## Build UI for production
+	cd ui && npm run build
+
+ui-codegen: ## Regenerate GraphQL types from server schema
+	cd ui && npx graphql-codegen
