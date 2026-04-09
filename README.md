@@ -18,7 +18,7 @@ Built with **Strawberry GraphQL**, **FastAPI**, **Beanie ODM**, and **MongoDB**.
 
 ### Prerequisites
 
-- Python 3.13+
+- Python 3.12+
 - [UV](https://docs.astral.sh/uv/) package manager
 - [Podman](https://podman.io/) (for local MongoDB) or a running MongoDB instance
 
