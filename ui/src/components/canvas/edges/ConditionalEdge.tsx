@@ -2,12 +2,11 @@ import { memo } from "react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
-  getBezierPath,
+  getSmoothStepPath,
   type EdgeProps,
 } from "@xyflow/react";
-import { Badge } from "@/components/ui/badge";
 
-function ConditionalEdgeComponent({
+function DAGEdgeComponent({
   sourceX,
   sourceY,
   targetX,
@@ -18,13 +17,14 @@ function ConditionalEdgeComponent({
   selected,
   markerEnd,
 }: EdgeProps) {
-  const [edgePath, labelX, labelY] = getBezierPath({
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
     sourcePosition,
     targetX,
     targetY,
     targetPosition,
+    borderRadius: 12,
   });
 
   const condition = (data as any)?.condition;
@@ -37,12 +37,10 @@ function ConditionalEdgeComponent({
         markerEnd={markerEnd}
         style={{
           stroke: selected
-            ? "hsl(var(--primary))"
-            : hasCondition
-            ? "#f59e0b"
-            : "hsl(var(--muted-foreground))",
-          strokeWidth: selected ? 2 : 1.5,
-          strokeDasharray: hasCondition ? "6 3" : undefined,
+            ? "var(--color-primary)"
+            : "var(--color-muted-foreground)",
+          strokeWidth: selected ? 2.5 : 1.5,
+          opacity: selected ? 1 : 0.6,
         }}
       />
       {hasCondition && (
@@ -54,12 +52,9 @@ function ConditionalEdgeComponent({
               pointerEvents: "all",
             }}
           >
-            <Badge
-              variant="outline"
-              className="bg-background text-[10px] border-yellow-500/50 text-yellow-500 cursor-pointer"
-            >
+            <div className="rounded-full bg-background border border-border px-2 py-0.5 text-[10px] text-muted-foreground shadow-sm">
               {condition.description}
-            </Badge>
+            </div>
           </div>
         </EdgeLabelRenderer>
       )}
@@ -67,4 +62,4 @@ function ConditionalEdgeComponent({
   );
 }
 
-export const ConditionalEdge = memo(ConditionalEdgeComponent);
+export const DAGEdge = memo(DAGEdgeComponent);

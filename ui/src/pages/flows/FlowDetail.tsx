@@ -1,16 +1,16 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "urql";
 import { ArrowLeft, Trash2, Play } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VersionBadge } from "@/components/shared/Badges";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { DAGCanvas, type DAGCanvasNode, type DAGCanvasEdge } from "@/components/canvas/FlowCanvas";
 import { useDeleteEntity } from "@/hooks/useEntity";
-import { FLOW_QUERY } from "@/graphql/queries/entities";
+import { FLOW_QUERY, WORK_BLOCKS_QUERY } from "@/graphql/queries/entities";
 import { DELETE_FLOW } from "@/graphql/mutations/entities";
 
 export default function FlowDetail() {
@@ -24,6 +24,8 @@ export default function FlowDetail() {
     pause: !id,
   });
 
+  const [wbResult] = useQuery({ query: WORK_BLOCKS_QUERY });
+
   const { deleteEntity } = useDeleteEntity({
     mutation: DELETE_FLOW,
     onSuccess: () => {
@@ -33,6 +35,39 @@ export default function FlowDetail() {
   });
 
   const flow = result.data?.flow;
+  const workBlocks: any[] = wbResult.data?.workBlocks ?? [];
+
+  const dagNodes: DAGCanvasNode[] = useMemo(
+    () =>
+      (flow?.nodes ?? []).map((n: any) => {
+        const wb = workBlocks.find((w: any) => w.id === n.targetId);
+        return {
+          id: n.id,
+          label: n.alias || wb?.name || n.targetId.slice(0, 12),
+          subtitle: `v${n.targetVersion}`,
+          description: wb?.description,
+          inputCount: wb?.inputs?.length,
+          outputCount: wb?.outputs?.length,
+          inputs: wb?.inputs?.map((p: any) => p.name),
+          outputs: wb?.outputs?.map((p: any) => p.name),
+          meta: { workBlockId: n.targetId },
+        };
+      }),
+    [flow?.nodes, workBlocks]
+  );
+
+  const dagEdges: DAGCanvasEdge[] = useMemo(
+    () =>
+      (flow?.edges ?? [])
+        .filter((e: any) => e.sourceId && e.targetId)
+        .map((e: any, i: number) => ({
+          id: `e-${i}`,
+          source: e.sourceId,
+          target: e.targetId,
+          condition: e.condition?.description,
+        })),
+    [flow?.edges]
+  );
 
   if (result.fetching) {
     return (
@@ -79,69 +114,30 @@ export default function FlowDetail() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      {/* DAG Canvas — primary view */}
+      {dagNodes.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">
-              Nodes ({flow.nodes?.length ?? 0})
+              Flow Graph — {dagNodes.length} nodes, {dagEdges.length} edges
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {flow.nodes?.length > 0 ? (
-              <div className="space-y-2">
-                {flow.nodes.map((node: any) => (
-                  <div key={node.id} className="flex items-center gap-2 rounded-md border p-2">
-                    <Badge variant="outline" className="font-mono text-[10px]">
-                      {node.id.slice(0, 8)}…
-                    </Badge>
-                    <span className="text-sm">{node.alias || "Unnamed"}</span>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      → {node.targetId.slice(0, 8)}… v{node.targetVersion}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No nodes</p>
-            )}
+          <CardContent className="p-0">
+            <div className="h-[400px] rounded-b-lg overflow-hidden">
+              <DAGCanvas
+                nodes={dagNodes}
+                edges={dagEdges}
+                interactive={false}
+                onNodeClick={(nodeId) => {
+                  const node = dagNodes.find((n) => n.id === nodeId);
+                  const wbId = (node?.meta as any)?.workBlockId;
+                  if (wbId) navigate(`/work-blocks/${wbId}`);
+                }}
+              />
+            </div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">
-              Edges ({flow.edges?.length ?? 0})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {flow.edges?.length > 0 ? (
-              <div className="space-y-2">
-                {flow.edges.map((edge: any, i: number) => (
-                  <div key={i} className="flex items-center gap-2 rounded-md border p-2 text-xs">
-                    <span className="font-mono">
-                      {edge.sourceId ? edge.sourceId.slice(0, 8) + "…" : "entry"}
-                    </span>
-                    <span className="text-muted-foreground">→</span>
-                    <span className="font-mono">{edge.targetId.slice(0, 8)}…</span>
-                    {edge.condition && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        {edge.condition.description}
-                      </Badge>
-                    )}
-                    {edge.portMappings?.length > 0 && (
-                      <span className="text-muted-foreground">
-                        ({edge.portMappings.length} mappings)
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No edges</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      )}
 
       {flow.expectedOutcome && (
         <Card>

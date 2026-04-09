@@ -1,14 +1,16 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "urql";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { VersionBadge } from "@/components/shared/Badges";
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog";
+import { DAGCanvas, type DAGCanvasNode, type DAGCanvasEdge } from "@/components/canvas/FlowCanvas";
 import { useDeleteEntity } from "@/hooks/useEntity";
 import { CONTRACT_QUERY } from "@/graphql/queries/entities";
 import { DELETE_CONTRACT } from "@/graphql/mutations/entities";
@@ -33,6 +35,51 @@ export default function ContractDetail() {
   });
 
   const contract = result.data?.contract;
+
+  // Build DAG: contract → workflows + sub-contracts as a relationship graph
+  const { dagNodes, dagEdges } = useMemo(() => {
+    if (!contract) return { dagNodes: [] as DAGCanvasNode[], dagEdges: [] as DAGCanvasEdge[] };
+
+    const nodes: DAGCanvasNode[] = [];
+    const edges: DAGCanvasEdge[] = [];
+    const contractNodeId = "contract-root";
+
+    nodes.push({
+      id: contractNodeId,
+      label: contract.name,
+      subtitle: `Contract v${contract.version}`,
+    });
+
+    for (const ref of contract.workFlows ?? []) {
+      const nodeId = `wf-${ref.flowId}`;
+      nodes.push({
+        id: nodeId,
+        label: ref.alias || ref.flowId.slice(0, 12),
+        subtitle: `Flow v${ref.flowVersion}`,
+      });
+      edges.push({
+        id: `e-${uuidv4()}`,
+        source: contractNodeId,
+        target: nodeId,
+      });
+    }
+
+    for (const ref of contract.subContracts ?? []) {
+      const nodeId = `sc-${ref.contractId}`;
+      nodes.push({
+        id: nodeId,
+        label: ref.alias || ref.contractId.slice(0, 12),
+        subtitle: `Sub-contract v${ref.contractVersion}`,
+      });
+      edges.push({
+        id: `e-${uuidv4()}`,
+        source: contractNodeId,
+        target: nodeId,
+      });
+    }
+
+    return { dagNodes: nodes, dagEdges: edges };
+  }, [contract]);
 
   if (result.fetching) {
     return (
@@ -81,61 +128,25 @@ export default function ContractDetail() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
+      {/* DAG Canvas — primary view showing contract → workflow/sub-contract relationships */}
+      {dagNodes.length > 1 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-sm">
-              Workflows ({contract.workFlows?.length ?? 0})
+              Contract Graph — {(contract.workFlows?.length ?? 0)} workflows, {(contract.subContracts?.length ?? 0)} sub-contracts
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            {contract.workFlows?.length > 0 ? (
-              <div className="space-y-2">
-                {contract.workFlows.map((ref: any, i: number) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-accent"
-                    onClick={() => navigate(`/flows/${ref.flowId}`)}
-                  >
-                    <span className="font-mono text-xs">{ref.flowId.slice(0, 8)}…</span>
-                    <VersionBadge version={ref.flowVersion} />
-                    {ref.alias && <span className="text-sm">{ref.alias}</span>}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No workflows assigned</p>
-            )}
+          <CardContent className="p-0">
+            <div className="h-[350px] rounded-b-lg overflow-hidden">
+              <DAGCanvas
+                nodes={dagNodes}
+                edges={dagEdges}
+                interactive={false}
+              />
+            </div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">
-              Sub-Contracts ({contract.subContracts?.length ?? 0})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {contract.subContracts?.length > 0 ? (
-              <div className="space-y-2">
-                {contract.subContracts.map((ref: any, i: number) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 rounded-md border p-2 cursor-pointer hover:bg-accent"
-                    onClick={() => navigate(`/contracts/${ref.contractId}`)}
-                  >
-                    <span className="font-mono text-xs">{ref.contractId.slice(0, 8)}…</span>
-                    <VersionBadge version={ref.contractVersion} />
-                    {ref.alias && <span className="text-sm">{ref.alias}</span>}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground">No sub-contracts</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      )}
 
       {contract.requiredOutcomes?.length > 0 && (
         <Card>
