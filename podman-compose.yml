@@ -29,7 +29,7 @@ services:
       dockerfile: Containerfile
     container_name: openoma-ui
     ports:
-      - "80:80"
+      - "8088:80"
     depends_on:
       - server
     restart: unless-stopped
