@@ -7,6 +7,7 @@ from strawberry.fastapi import GraphQLRouter
 from openoma_server.auth.middleware import AuthMiddleware
 from openoma_server.config import settings
 from openoma_server.database import close_db, init_db
+from openoma_server.graphql.context import get_context
 from openoma_server.graphql.schema import schema
 
 
@@ -37,7 +38,7 @@ app.add_middleware(
 app.add_middleware(AuthMiddleware)
 
 # GraphQL
-graphql_router = GraphQLRouter(schema)
+graphql_router = GraphQLRouter(schema, context_getter=get_context)
 app.include_router(graphql_router, prefix="/graphql")
 
 
