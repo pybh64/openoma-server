@@ -1,4 +1,4 @@
-.PHONY: help dev test lint fmt run sync clean ui-dev ui-build ui-install ui-build-container
+.PHONY: help dev test lint fmt run sync clean up down mongo rebuild ui-dev ui-build ui-install ui-build-container
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -29,8 +29,15 @@ fmt: ## Format code with ruff
 up: ## Start all services via podman-compose
 	podman-compose up -d
 
-down: ## Stop all services
+down: ## Stop services in order (ui → server → mongo) then remove
+	@podman stop openoma-ui 2>/dev/null || true
+	@podman stop openoma-server 2>/dev/null || true
+	@podman stop openoma-mongo 2>/dev/null || true
 	podman-compose down
+
+rebuild: ## Rebuild server + ui images with latest changes and restart them
+	podman-compose build server ui
+	podman-compose up -d server ui
 
 mongo: ## Start only MongoDB
 	podman-compose up -d mongo

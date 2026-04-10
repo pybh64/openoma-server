@@ -9,6 +9,7 @@ services:
     environment:
       MONGO_INITDB_DATABASE: openoma
     restart: unless-stopped
+    stop_grace_period: 10s
 
   server:
     build:
@@ -29,10 +30,11 @@ services:
       dockerfile: Containerfile
     container_name: openoma-ui
     ports:
-      - "8088:80"
+      - "8088:8088"
     depends_on:
       - server
     restart: unless-stopped
+    stop_grace_period: 5s
 
 volumes:
   openoma-mongo-data:
