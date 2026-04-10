@@ -4,29 +4,9 @@ from unittest.mock import patch
 import pytest
 import pytest_asyncio
 from beanie import init_beanie
-from beanie.odm.queries.aggregation import AggregationQuery
 from mongomock_motor import AsyncMongoMockClient
 
 from openoma_server.models import ALL_DOCUMENT_MODELS
-
-# Store original get_cursor for reference
-_original_get_cursor = AggregationQuery.get_cursor
-
-
-async def _patched_get_cursor(self):
-    """Patch for mongomock-motor: aggregate() returns cursor directly, not a coroutine."""
-    aggregation_pipeline = self.get_aggregation_pipeline()
-    result = self.document_model.get_pymongo_collection().aggregate(
-        aggregation_pipeline, session=self.session, **self.pymongo_kwargs
-    )
-    # If it's already a cursor (mongomock), return it; if awaitable, await it
-    if hasattr(result, "__anext__"):
-        return result
-    return await result
-
-
-# Apply the patch globally for tests
-AggregationQuery.get_cursor = _patched_get_cursor
 
 
 @pytest.fixture(scope="session")

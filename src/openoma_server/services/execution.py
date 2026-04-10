@@ -215,17 +215,33 @@ async def add_block_to_flow_execution(
 async def refresh_flow_state(
     flow_execution_id: UUID, terminal_node_ids: set[UUID] | None = None
 ) -> FlowExecutionDoc:
-    """Re-derive flow state from child block execution states."""
+    """Re-derive flow state from child block execution states.
+
+    If *terminal_node_ids* is not provided, it is computed from the flow
+    definition by finding nodes with no outgoing edges.
+    """
+    from openoma_server.models.flow import FlowDoc
+
     doc = await FlowExecutionDoc.find_one(FlowExecutionDoc.execution_id == flow_execution_id)
     if doc is None:
         raise ValueError(f"FlowExecution {flow_execution_id} not found")
+
+    # Auto-compute terminal nodes from the flow definition
+    if terminal_node_ids is None:
+        flow_doc = await FlowDoc.get_by_version(doc.flow_id, doc.flow_version)
+        if flow_doc is not None:
+            all_node_ids = {n.id for n in flow_doc.nodes}
+            source_ids = {e.source_id for e in flow_doc.edges if e.source_id is not None}
+            terminal_node_ids = all_node_ids - source_ids
+        else:
+            terminal_node_ids = set()
 
     block_docs = await BlockExecutionDoc.find(
         {"execution_id": {"$in": doc.block_executions}}
     ).to_list()
     block_cores = [bd.to_core() for bd in block_docs]
 
-    state = derive_flow_state(block_cores, terminal_node_ids or set())
+    state = derive_flow_state(block_cores, terminal_node_ids)
     doc.state = state.value
     await doc.save()
     return doc

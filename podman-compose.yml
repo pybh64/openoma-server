@@ -3,7 +3,7 @@ services:
     image: docker.io/library/mongo:7
     container_name: openoma-mongo
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - openoma-mongo-data:/data/db
     environment:
@@ -12,8 +12,8 @@ services:
 
   server:
     build:
-      context: .
-      dockerfile: Containerfile
+      context: ..
+      dockerfile: openoma-server/Containerfile
     container_name: openoma-server
     ports:
       - "8000:8000"

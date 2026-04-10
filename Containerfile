@@ -5,18 +5,19 @@ WORKDIR /app
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Copy dependency files first for layer caching
-COPY pyproject.toml uv.lock* ./
+# Copy the openoma local dependency (referenced as ../openoma in pyproject.toml)
+# With WORKDIR=/app, ../openoma resolves to /openoma inside the container
+COPY openoma/ /openoma/
 
-# Copy the openoma library (needed as local dependency)
-COPY ../openoma /openoma
+# Copy server dependency files for layer caching
+COPY openoma-server/pyproject.toml openoma-server/uv.lock* openoma-server/README.md ./
 
-# Install dependencies
+# Copy application source before sync so the project installs correctly
+COPY openoma-server/src/ src/
+COPY openoma-server/main.py .
+
+# Install all dependencies including the project itself
 RUN uv sync --frozen --no-dev 2>/dev/null || uv sync --no-dev
-
-# Copy application code
-COPY src/ src/
-COPY main.py .
 
 EXPOSE 8000
 
