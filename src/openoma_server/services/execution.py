@@ -213,6 +213,13 @@ async def add_block_to_flow_execution(
     if block_execution_id not in doc.block_executions:
         doc.block_executions.append(block_execution_id)
         await doc.save()
+    # Keep block's back-reference in sync so canvas queries can find it by flow
+    be_doc = await BlockExecutionDoc.find_one(
+        BlockExecutionDoc.execution_id == block_execution_id
+    )
+    if be_doc is not None and be_doc.flow_execution_id != flow_execution_id:
+        be_doc.flow_execution_id = flow_execution_id
+        await be_doc.save()
     return doc
 
 
