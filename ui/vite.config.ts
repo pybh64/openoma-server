@@ -12,11 +12,12 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/graphql': {
+      // In dev, proxy /api/* → backend (strip /api prefix), matching nginx behaviour
+      '/api': {
         target: 'http://localhost:8000',
+        rewrite: (p) => p.replace(/^\/api/, ''),
         ws: true,
       },
-      '/health': 'http://localhost:8000',
     },
   },
 })

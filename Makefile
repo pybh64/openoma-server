@@ -1,4 +1,4 @@
-.PHONY: help dev test lint fmt run sync clean ui-dev ui-build ui-install
+.PHONY: help dev test lint fmt run sync clean ui-dev ui-build ui-install ui-build-container
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -41,8 +41,11 @@ clean: ## Remove containers and volumes
 ui-install: ## Install UI dependencies
 	cd ui && npm install
 
-ui-dev: ## Start UI dev server (Vite)
+ui-dev: ## Start UI dev server (Vite) — requires backend on :8000
 	cd ui && npm run dev
 
-ui-build: ## Build UI for production
+ui-build: ## Build UI for production (static files in ui/dist/)
 	cd ui && npm run build
+
+ui-build-container: ## Build the UI container image
+	podman build -t openoma-ui -f ui/Containerfile ui/

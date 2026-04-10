@@ -2,12 +2,12 @@ import { Client, fetchExchange, subscriptionExchange } from "urql";
 import { createClient as createWSClient } from "graphql-ws";
 
 const wsClient = createWSClient({
-  url: `ws://${window.location.host}/graphql`,
+  url: `ws://${window.location.host}/api/graphql`,
   connectionParams: {},
 });
 
 export const client = new Client({
-  url: "/graphql",
+  url: "/api/graphql",
   exchanges: [
     fetchExchange,
     subscriptionExchange({
