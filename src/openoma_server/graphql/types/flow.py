@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 from datetime import datetime
 from uuid import UUID
 
 import strawberry
 
 from openoma_server.graphql.types.common import JSON
-from openoma_server.graphql.types.work_block import ExpectedOutcomeType
+from openoma_server.graphql.types.work_block import ExpectedOutcomeType, WorkBlockType
 
 
 @strawberry.type
@@ -27,6 +29,15 @@ class NodeReferenceType:
     target_version: int
     alias: str | None
     metadata: JSON
+
+    @strawberry.field
+    async def work_block(self, info: strawberry.Info) -> WorkBlockType | None:
+        from openoma_server.graphql.resolvers import work_block_from_core
+
+        core_block = await info.context.work_block_loader.load(
+            (self.target_id, self.target_version)
+        )
+        return work_block_from_core(core_block) if core_block else None
 
 
 @strawberry.type

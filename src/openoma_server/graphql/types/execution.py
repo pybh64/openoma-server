@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 from uuid import UUID
 
@@ -54,9 +56,17 @@ class FlowExecutionType:
     contract_execution_id: UUID | None
     flow_id: UUID
     flow_version: int
-    block_executions: list[UUID]
+    _block_execution_ids: strawberry.Private[list[UUID]]
     state: str
     created_at: datetime
+
+    @strawberry.field
+    async def block_executions(self, info: strawberry.Info) -> list[BlockExecutionType]:
+        from openoma_server.graphql.resolvers import block_execution_to_gql
+
+        ctx = info.context
+        docs = await ctx.block_execution_loader.load_many(self._block_execution_ids)
+        return [block_execution_to_gql(doc) for doc in docs if doc is not None]
 
 
 @strawberry.type
@@ -64,8 +74,28 @@ class ContractExecutionType:
     id: UUID
     contract_id: UUID
     contract_version: int
-    flow_executions: list[UUID]
-    sub_contract_executions: list[UUID]
+    _flow_execution_ids: strawberry.Private[list[UUID]]
+    _sub_contract_execution_ids: strawberry.Private[list[UUID]]
     assessment_executions: list[AssessmentResultType]
     state: str
     created_at: datetime
+
+    @strawberry.field
+    async def flow_executions(self, info: strawberry.Info) -> list[FlowExecutionType]:
+        from openoma_server.graphql.resolvers import flow_execution_to_gql
+
+        ctx = info.context
+        docs = await ctx.flow_execution_loader.load_many(self._flow_execution_ids)
+        return [flow_execution_to_gql(doc) for doc in docs if doc is not None]
+
+    @strawberry.field
+    async def sub_contract_executions(
+        self, info: strawberry.Info
+    ) -> list[ContractExecutionType]:
+        from openoma_server.graphql.resolvers import contract_execution_to_gql
+
+        ctx = info.context
+        docs = await ctx.contract_execution_loader.load_many(
+            self._sub_contract_execution_ids
+        )
+        return [contract_execution_to_gql(doc) for doc in docs if doc is not None]

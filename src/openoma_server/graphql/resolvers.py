@@ -1,5 +1,10 @@
 """Converter functions from Beanie docs to GraphQL types."""
 
+from openoma_server.graphql.types.canvas_layout import (
+    CanvasLayoutType,
+    EdgeLayoutType,
+    NodePositionType,
+)
 from openoma_server.graphql.types.contract import (
     AssessmentBindingType,
     ContractReferenceType,
@@ -25,10 +30,16 @@ from openoma_server.graphql.types.flow import (
     NodeReferenceType,
     PortMappingType,
 )
+from openoma_server.graphql.types.flow_draft import FlowDraftType
 from openoma_server.graphql.types.work_block import (
     ExpectedOutcomeType,
     PortDescriptorType,
     WorkBlockType,
+)
+from openoma_server.models.canvas_layout import (
+    CanvasLayoutDoc,
+    EdgeLayoutDoc,
+    NodePositionDoc,
 )
 from openoma_server.models.contract import ContractDoc, RequiredOutcomeDoc
 from openoma_server.models.embedded import (
@@ -51,7 +62,43 @@ from openoma_server.models.execution import (
     FlowExecutionDoc,
 )
 from openoma_server.models.flow import FlowDoc
+from openoma_server.models.flow_draft import FlowDraftDoc
 from openoma_server.models.work_block import WorkBlockDoc
+
+# ── Canvas layout converters ──────────────────────────────────────
+
+
+def _node_position(n: NodePositionDoc) -> NodePositionType:
+    return NodePositionType(
+        node_reference_id=n.node_reference_id,
+        x=n.x,
+        y=n.y,
+        width=n.width,
+        height=n.height,
+        metadata=n.metadata,
+    )
+
+
+def _edge_layout(e: EdgeLayoutDoc) -> EdgeLayoutType:
+    return EdgeLayoutType(
+        source_id=e.source_id,
+        target_id=e.target_id,
+        bend_points=e.bend_points,
+        label_position=e.label_position,
+        metadata=e.metadata,
+    )
+
+
+def canvas_layout_to_gql(doc: CanvasLayoutDoc) -> CanvasLayoutType:
+    return CanvasLayoutType(
+        flow_id=doc.flow_id,
+        flow_version=doc.flow_version,
+        node_positions=[_node_position(n) for n in doc.node_positions],
+        edge_layouts=[_edge_layout(e) for e in doc.edge_layouts],
+        viewport=doc.viewport,
+        updated_at=doc.updated_at,
+        updated_by=doc.updated_by,
+    )
 
 
 def _port_desc(p: PortDescriptorDoc) -> PortDescriptorType:
@@ -64,11 +111,49 @@ def _port_desc(p: PortDescriptorDoc) -> PortDescriptorType:
     )
 
 
+def _port_desc_from_core(p) -> PortDescriptorType:
+    return PortDescriptorType(
+        name=p.name,
+        description=p.description,
+        required=p.required,
+        schema_def=p.schema_,
+        metadata=dict(p.metadata),
+    )
+
+
 def _expected_outcome(e: ExpectedOutcomeDoc | None) -> ExpectedOutcomeType | None:
     if e is None:
         return None
     return ExpectedOutcomeType(
         name=e.name, description=e.description, schema_def=e.schema_def, metadata=e.metadata
+    )
+
+
+def _expected_outcome_from_core(e) -> ExpectedOutcomeType | None:
+    if e is None:
+        return None
+    return ExpectedOutcomeType(
+        name=e.name,
+        description=e.description,
+        schema_def=e.schema_,
+        metadata=dict(e.metadata),
+    )
+
+
+def work_block_from_core(block) -> WorkBlockType:
+    """Convert an openoma core WorkBlock to the GraphQL type."""
+    return WorkBlockType(
+        id=block.id,
+        version=block.version,
+        created_at=block.created_at,
+        created_by=block.created_by,
+        name=block.name,
+        description=block.description,
+        inputs=[_port_desc_from_core(p) for p in block.inputs],
+        outputs=[_port_desc_from_core(p) for p in block.outputs],
+        execution_hints=list(block.execution_hints),
+        expected_outcome=_expected_outcome_from_core(block.expected_outcome),
+        metadata=dict(block.metadata),
     )
 
 
@@ -129,6 +214,26 @@ def flow_to_gql(doc: FlowDoc) -> FlowType:
         edges=[_edge(e) for e in doc.edges],
         expected_outcome=_expected_outcome(doc.expected_outcome),
         metadata=doc.metadata,
+    )
+
+
+def flow_draft_to_gql(doc: FlowDraftDoc) -> FlowDraftType:
+    return FlowDraftType(
+        draft_id=doc.draft_id,
+        base_flow_id=doc.base_flow_id,
+        base_flow_version=doc.base_flow_version,
+        name=doc.name,
+        description=doc.description,
+        nodes=[_node_ref(n) for n in doc.nodes],
+        edges=[_edge(e) for e in doc.edges],
+        expected_outcome=_expected_outcome(doc.expected_outcome),
+        metadata=doc.metadata,
+        node_positions=doc.node_positions,
+        edge_layouts=doc.edge_layouts,
+        viewport=doc.viewport,
+        created_at=doc.created_at,
+        updated_at=doc.updated_at,
+        created_by=doc.created_by,
     )
 
 
@@ -245,7 +350,7 @@ def flow_execution_to_gql(doc: FlowExecutionDoc) -> FlowExecutionType:
         contract_execution_id=doc.contract_execution_id,
         flow_id=doc.flow_id,
         flow_version=doc.flow_version,
-        block_executions=list(doc.block_executions),
+        _block_execution_ids=list(doc.block_executions),
         state=doc.state,
         created_at=doc.created_at,
     )
@@ -264,8 +369,8 @@ def contract_execution_to_gql(doc: ContractExecutionDoc) -> ContractExecutionTyp
         id=doc.execution_id,
         contract_id=doc.contract_id,
         contract_version=doc.contract_version,
-        flow_executions=list(doc.flow_executions),
-        sub_contract_executions=list(doc.sub_contract_executions),
+        _flow_execution_ids=list(doc.flow_executions),
+        _sub_contract_execution_ids=list(doc.sub_contract_executions),
         assessment_executions=[_assessment_result_gql(a) for a in doc.assessment_executions],
         state=doc.state,
         created_at=doc.created_at,
