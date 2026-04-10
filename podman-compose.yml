@@ -1,0 +1,28 @@
+services:
+  mongo:
+    image: docker.io/library/mongo:7
+    container_name: openoma-mongo
+    ports:
+      - "27017:27017"
+    volumes:
+      - openoma-mongo-data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: openoma
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: Containerfile
+    container_name: openoma-server
+    ports:
+      - "8000:8000"
+    environment:
+      OPENOMA_MONGO_URI: "mongodb://mongo:27017"
+      OPENOMA_MONGO_DB: "openoma"
+    depends_on:
+      - mongo
+    restart: unless-stopped
+
+volumes:
+  openoma-mongo-data:

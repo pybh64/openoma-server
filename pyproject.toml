@@ -1,7 +1,38 @@
 [project]
 name = "openoma-server"
 version = "0.1.0"
-description = "Add your description here"
+description = "GraphQL server for the OpenOMA operational process framework"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "strawberry-graphql[fastapi]>=0.262.0",
+    "beanie>=1.29.0",
+    "motor>=3.7.0",
+    "pydantic-settings>=2.8.0",
+    "openoma",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+    "httpx>=0.28.0",
+    "mongomock-motor>=0.0.34",
+    "ruff>=0.11.0",
+]
+
+[tool.uv.sources]
+openoma = { path = "../openoma", editable = true }
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
