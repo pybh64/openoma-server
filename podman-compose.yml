@@ -23,6 +23,7 @@ services:
     depends_on:
       - mongo
     restart: unless-stopped
+    stop_grace_period: 15s
 
 volumes:
   openoma-mongo-data:
