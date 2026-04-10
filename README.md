@@ -8,31 +8,40 @@ Flows, Contracts) and event-sourced execution tracking — through a single
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│  FastAPI + Strawberry GraphQL          (app.py)          │
-│  ┌────────────┐  ┌────────────┐  ┌────────────────────┐ │
-│  │  Queries   │  │ Mutations  │  │  Types / Inputs    │ │
-│  └─────┬──────┘  └─────┬──────┘  └────────────────────┘ │
-│        │               │                                 │
-│  ┌─────▼───────────────▼──────┐                          │
-│  │       Services Layer       │  ← business logic,       │
-│  │  work_block · flow · contract  validation, versioning │
-│  │  execution · required_outcome                         │
-│  └─────┬──────────────────────┘                          │
-│        │                                                 │
-│  ┌─────▼──────────────────────┐                          │
-│  │       Store Layer          │  ← implements OpenOMA    │
-│  │  DefinitionStore           │    store protocols       │
-│  │  EventStore                │    over MongoDB          │
-│  │  ExecutionStore            │                          │
-│  └─────┬──────────────────────┘                          │
-│        │                                                 │
-│  ┌─────▼──────────────────────┐                          │
-│  │     Models (Beanie ODM)    │  ← Mongo documents with  │
-│  │  WorkBlockDoc · FlowDoc    │    bidirectional core ↔  │
-│  │  ContractDoc · Execution*  │    doc conversion        │
-│  └────────────────────────────┘                          │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│  FastAPI + Strawberry GraphQL                      (app.py)      │
+│                                                                  │
+│  ┌──────────┐  ┌──────────┐  ┌─────────────┐  ┌─────────────┐  │
+│  │ Queries  │  │Mutations │  │Subscriptions│  │Types/Inputs │  │
+│  └────┬─────┘  └────┬─────┘  └──────┬──────┘  └─────────────┘  │
+│       │             │               │                            │
+│  ┌────▼─────────────▼───────────────▼────┐                       │
+│  │      GraphQL Context (per-request)    │  ← 6 DataLoaders,     │
+│  │  user · stores · work_block_loader    │    batch $or queries  │
+│  │  flow_loader · block_execution_loader │    to prevent N+1     │
+│  └────┬──────────────────────────────────┘                       │
+│       │                                   ┌───────────────────┐  │
+│  ┌────▼──────────────────────────┐        │ ExecutionEventBus │  │
+│  │        Services Layer         │───────▶│ (in-process       │  │
+│  │  work_block · flow · contract │        │  pub/sub for      │  │
+│  │  flow_draft · canvas_layout   │        │  subscriptions)   │  │
+│  │  canvas · execution · pubsub  │        └───────────────────┘  │
+│  └────┬──────────────────────────┘                               │
+│       │                                                          │
+│  ┌────▼──────────────────────────┐                               │
+│  │         Store Layer           │  ← OpenOMA store protocols    │
+│  │  DefinitionStore (bulk $or)   │    over MongoDB; keyset       │
+│  │  EventStore · ExecutionStore  │    cursor pagination          │
+│  └────┬──────────────────────────┘                               │
+│       │                                                          │
+│  ┌────▼──────────────────────────┐                               │
+│  │      Models (Beanie ODM)      │  ← Mongo documents;           │
+│  │  WorkBlockDoc · FlowDoc       │    bidirectional core ↔ doc   │
+│  │  FlowDraftDoc (mutable draft) │    conversion; unique indexes  │
+│  │  CanvasLayoutDoc (positions)  │    on (entity_id, version)    │
+│  │  ContractDoc · Execution*     │                               │
+│  └───────────────────────────────┘                               │
+└──────────────────────────────────────────────────────────────────┘
          │
          ▼
       MongoDB
@@ -42,10 +51,10 @@ Flows, Contracts) and event-sourced execution tracking — through a single
 
 | Layer | Location | Responsibility |
 |-------|----------|----------------|
-| **GraphQL** | `graphql/` | Schema, resolvers, input/output types. Thin — delegates to services. |
+| **GraphQL** | `graphql/` | Schema, resolvers, input/output types. Thin — delegates to services. Per-request `GraphQLContext` holds 6 DataLoaders. |
 | **Services** | `services/` | Business logic, input conversion, validation, authorization hooks. |
-| **Store** | `store/` | Implements OpenOMA's `DefinitionStore`, `EventStore`, and `ExecutionStore` protocols over MongoDB. |
-| **Models** | `models/` | Beanie `Document` classes with indexes, versioning helpers, and `to_core()` / `from_core()` converters. |
+| **Store** | `store/` | Implements OpenOMA's `DefinitionStore`, `EventStore`, and `ExecutionStore` protocols over MongoDB. Bulk `$or` queries and keyset cursor pagination. |
+| **Models** | `models/` | Beanie `Document` classes with indexes, versioning helpers, and `to_core()` / `from_core()` converters. Includes `FlowDraftDoc` and `CanvasLayoutDoc`. |
 | **Auth** | `auth/` | Middleware, context, and permission stubs (ready for JWT/OAuth integration). |
 
 ### Key design choices
@@ -92,12 +101,15 @@ Flows, Contracts) and event-sourced execution tracking — through a single
 # Install dependencies
 make sync
 
-# Start MongoDB and the server (hot-reload)
+# Start MongoDB + server with hot-reload (recommended for development)
 make dev
 # → GraphQL Playground at http://localhost:8000/graphql
 # → Health check at http://localhost:8000/health
 
-# Or start everything in containers
+# Or: run the server only (MongoDB must be running separately)
+make run
+
+# Or: start everything in containers
 make up
 ```
 
@@ -247,21 +259,56 @@ Flow and Contract executions follow the same create → add children →
 
 ### Subscriptions (WebSocket)
 
+Connect to `ws://localhost:8000/graphql` using the `graphql-transport-ws`
+subprotocol (primary) or the legacy `graphql-ws` protocol.
+
 | Subscription | Description |
 |-------------|-------------|
 | `executionEvents(executionId?)` | Stream execution events in real time. Filter by execution ID or receive all. |
+
+**Example connection (Python `websockets`):**
+
+```python
+import asyncio, json, websockets
+
+async def watch():
+    async with websockets.connect(
+        "ws://localhost:8000/graphql",
+        subprotocols=["graphql-transport-ws"],
+    ) as ws:
+        await ws.send(json.dumps({"type": "connection_init", "payload": {}}))
+        await ws.recv()  # connection_ack
+        await ws.send(json.dumps({
+            "id": "1", "type": "subscribe",
+            "payload": {"query": 'subscription { executionEvents { eventType executionId } }'},
+        }))
+        async for msg in ws:
+            print(json.loads(msg))
+
+asyncio.run(watch())
+```
 
 ## Containers
 
 ```bash
 make up       # Build & start MongoDB + server
-make down     # Stop services
+make down     # Stop services (completes in <1s)
 make mongo    # Start only MongoDB (for local dev)
 make clean    # Remove containers and volumes
 ```
 
 The `Containerfile` builds from the monorepo root (context `..`) so it can
 copy the `openoma/` library alongside the server source.
+
+### Graceful shutdown
+
+The container runs uvicorn directly as PID 1 (not via `uv run`) so SIGTERM
+reaches the process immediately. Uvicorn is configured with
+`--timeout-graceful-shutdown 5`, which force-closes any open WebSocket
+connections after 5 seconds and proceeds with lifespan teardown.
+`podman-compose.yml` sets `stop_grace_period: 15s` to give the full
+sequence room before SIGKILL fires. `make down` typically completes in
+under one second.
 
 ## License
 
