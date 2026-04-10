@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: oklch(0.985 0 0);
+  --color-foreground: oklch(0.145 0 0);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.145 0 0);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.145 0 0);
+  --color-primary: oklch(0.45 0.18 265);
+  --color-primary-foreground: oklch(0.985 0 0);
+  --color-secondary: oklch(0.965 0 0);
+  --color-secondary-foreground: oklch(0.205 0 0);
+  --color-muted: oklch(0.965 0 0);
+  --color-muted-foreground: oklch(0.556 0 0);
+  --color-accent: oklch(0.965 0 0);
+  --color-accent-foreground: oklch(0.205 0 0);
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-destructive-foreground: oklch(0.985 0 0);
+  --color-border: oklch(0.922 0 0);
+  --color-input: oklch(0.922 0 0);
+  --color-ring: oklch(0.45 0.18 265);
+  --color-sidebar: oklch(0.975 0 0);
+  --color-sidebar-foreground: oklch(0.345 0 0);
+  --color-sidebar-border: oklch(0.922 0 0);
+  --color-sidebar-accent: oklch(0.94 0.02 265);
+  --color-sidebar-accent-foreground: oklch(0.35 0.1 265);
+
+  --color-node-wb: oklch(0.93 0.04 265);
+  --color-node-wb-border: oklch(0.65 0.15 265);
+  --color-node-entry: oklch(0.93 0.04 145);
+  --color-node-entry-border: oklch(0.55 0.15 145);
+
+  --radius-lg: 0.5rem;
+  --radius-md: calc(var(--radius-lg) - 2px);
+  --radius-sm: calc(var(--radius-lg) - 4px);
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    margin: 0;
+  }
+  #root {
+    min-height: 100vh;
+  }
+}
+
+/* React Flow overrides */
+.react-flow__node {
+  z-index: 5 !important;
+}
+
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid var(--color-card);
+}
+
+.react-flow__handle-connecting {
+  background: var(--color-destructive);
+}
+
+.react-flow__handle-valid {
+  background: oklch(0.55 0.17 145);
+}
+
+.react-flow__edge-path {
+  stroke: var(--color-muted-foreground);
+  stroke-width: 2;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--color-primary);
+  stroke-width: 3;
+}
+
+.react-flow__minimap {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+.react-flow__controls {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.react-flow__controls button {
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-card);
+}

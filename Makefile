@@ -1,4 +1,4 @@
-.PHONY: help dev test lint fmt run sync clean
+.PHONY: help dev test lint fmt run sync clean ui-dev ui-build ui-install
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -37,3 +37,12 @@ mongo: ## Start only MongoDB
 
 clean: ## Remove containers and volumes
 	podman-compose down -v
+
+ui-install: ## Install UI dependencies
+	cd ui && npm install
+
+ui-dev: ## Start UI dev server (Vite)
+	cd ui && npm run dev
+
+ui-build: ## Build UI for production
+	cd ui && npm run build

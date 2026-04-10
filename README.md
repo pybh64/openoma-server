@@ -5,6 +5,86 @@ It persists and exposes the full OpenOMA domain — definitions (WorkBlocks,
 Flows, Contracts) and event-sourced execution tracking — through a single
 `/graphql` endpoint backed by MongoDB.
 
+## UI (Canvas Interface)
+
+A React-based canvas UI lives in `ui/`. It provides visual management of the
+full OpenOMA domain — WorkBlocks, Flows, Contracts, and Executions — using an
+interactive graph canvas powered by React Flow.
+
+### Key features
+
+- **Flow canvas** — drag, connect, and arrange WorkBlock nodes on a visual graph
+- **Draft editing** — create drafts from existing flows, add/remove nodes and
+  edges with granular mutations, then publish to create a new immutable version
+- **Search-based** — add WorkBlocks to a flow by searching by name (no UUID copy-paste)
+- **Object traversal** — navigate seamlessly from Contracts → Flows → WorkBlocks
+- **Execution monitoring** — view flow execution state overlaid on the canvas
+  with real-time updates via WebSocket subscriptions
+- **Dashboard** — overview of all entities with counts and recent items
+
+### Tech stack
+
+| Component | Technology |
+|-----------|------------|
+| Framework | React 19 + TypeScript |
+| Bundler | Vite 8 |
+| Canvas | React Flow (`@xyflow/react`) |
+| GraphQL client | urql + graphql-ws (subscriptions) |
+| State | Zustand (draft editing, canvas preferences) |
+| UI components | shadcn/ui (Radix + Tailwind v4) |
+| Styling | Tailwind CSS v4 |
+
+### Quick start
+
+```bash
+# Install UI dependencies
+make ui-install
+
+# Start the UI dev server (requires backend on port 8000)
+make ui-dev
+# → http://localhost:5173
+
+# Build for production
+make ui-build
+```
+
+The Vite dev server proxies `/graphql` to `http://localhost:8000`, so run
+`make dev` (or `make up`) in a separate terminal for the backend.
+
+### Project structure
+
+```
+ui/
+├── index.html
+├── vite.config.ts              # Tailwind v4 plugin, path aliases, backend proxy
+├── src/
+│   ├── main.tsx                # Entry: urql Provider + BrowserRouter
+│   ├── App.tsx                 # Routes (/, /work-blocks, /flows, /contracts, etc.)
+│   ├── index.css               # Tailwind v4 theme + React Flow overrides
+│   ├── types/index.ts          # TypeScript domain types matching GraphQL schema
+│   ├── lib/utils.ts            # Shared helpers (cn, shortId, formatDate)
+│   ├── graphql/
+│   │   ├── client.ts           # urql client with WebSocket subscriptions
+│   │   ├── queries/            # GraphQL query documents
+│   │   ├── mutations/          # GraphQL mutation documents
+│   │   └── subscriptions.ts    # WebSocket subscription documents
+│   ├── stores/
+│   │   ├── draftStore.ts       # Draft editing state (Zustand)
+│   │   └── canvasStore.ts      # Canvas preferences (Zustand)
+│   ├── components/
+│   │   ├── ui/                 # shadcn/ui primitives (button, dialog, etc.)
+│   │   ├── layout/             # AppLayout, Sidebar, PageHeader
+│   │   ├── shared/             # StateDisplay (loading, error, empty)
+│   │   ├── canvas/
+│   │   │   ├── FlowCanvas.tsx      # Read-only flow canvas
+│   │   │   ├── DraftCanvas.tsx     # Editable draft canvas
+│   │   │   ├── nodes/              # Custom React Flow nodes
+│   │   │   ├── edges/              # Custom React Flow edges
+│   │   │   └── panels/             # Toolbar, search, node detail panels
+│   │   └── work-blocks/        # WorkBlock forms
+│   └── pages/                  # Route page components
+```
+
 ## Architecture
 
 ```
