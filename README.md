@@ -57,6 +57,16 @@ Flows, Contracts) and event-sourced execution tracking — through a single
 - **Immutable versioning.** Definition entities (WorkBlock, Flow, Contract,
   RequiredOutcome) are never mutated — updates create a new `(id, version)`
   document. References always pin a specific version.
+- **Draft editing mode.** Canvas edits accumulate in `FlowDraftDoc` (mutable).
+  An explicit "publish" validates and creates a new immutable flow version.
+  Granular mutations (add/remove node, add/remove edge) avoid full-replacement overhead.
+- **Separate canvas layout.** Visual positioning (node x/y, edge bend-points,
+  viewport) is stored in `CanvasLayoutDoc`, keeping the OpenOMA core model pure.
+- **DataLoaders & bulk queries.** N+1 loops replaced with `$or` bulk fetches.
+  Strawberry DataLoaders batch field-level resolution across the query tree.
+- **Real-time subscriptions.** In-process `ExecutionEventBus` publishes events
+  from the execution pipeline. GraphQL subscriptions stream them over WebSocket
+  (`graphql-transport-ws` protocol).
 - **Protocol-based stores.** The store layer implements the abstract protocols
   defined in the `openoma` library, making it possible to swap the persistence
   backend without touching services or GraphQL.
@@ -137,28 +147,35 @@ src/openoma_server/
 ├── models/              # Beanie Document classes
 │   ├── work_block.py     #   WorkBlockDoc
 │   ├── flow.py           #   FlowDoc
+│   ├── flow_draft.py     #   FlowDraftDoc (mutable canvas drafts)
+│   ├── canvas_layout.py  #   CanvasLayoutDoc (visual positioning)
 │   ├── contract.py       #   ContractDoc, RequiredOutcomeDoc
 │   ├── execution.py      #   ExecutionEventDoc, Block/Flow/ContractExecutionDoc
 │   ├── embedded.py       #   Shared embedded sub-documents
 │   └── converters.py     #   Bidirectional core ↔ doc converters
 ├── store/               # OpenOMA store protocol implementations
-│   ├── definition_store.py
+│   ├── definition_store.py  # Bulk $or queries, cursor pagination
 │   ├── event_store.py
 │   └── execution_store.py
 ├── services/            # Business logic
 │   ├── work_block.py
 │   ├── flow.py
+│   ├── flow_draft.py     #   Draft lifecycle, granular node/edge mutations
+│   ├── canvas_layout.py  #   Canvas layout CRUD
+│   ├── canvas.py         #   Composite canvas data queries
 │   ├── contract.py
 │   ├── required_outcome.py
-│   └── execution.py
+│   ├── execution.py      #   Event-sourced execution + pub/sub hook
+│   └── pubsub.py         #   In-process ExecutionEventBus
 └── graphql/             # Strawberry GraphQL schema
-    ├── schema.py         #   Root Query + Mutation
-    ├── context.py        #   GraphQL context (user, stores)
+    ├── schema.py         #   Root Query + Mutation + Subscription
+    ├── context.py        #   GraphQL context (user, stores, DataLoaders)
     ├── resolvers.py      #   Doc → GQL type converters
-    ├── types/            #   Output types
-    ├── inputs/           #   Mutation input types
-    ├── queries/          #   Query resolvers
-    └── mutations/        #   Mutation resolvers
+    ├── types/            #   Output types (incl. pagination, canvas)
+    ├── inputs/           #   Mutation input types (incl. filters)
+    ├── queries/          #   Query resolvers (incl. canvas composites)
+    ├── mutations/        #   Mutation resolvers (incl. drafts)
+    └── subscriptions/    #   WebSocket subscription resolvers
 tests/
 ├── conftest.py          # mongomock fixtures
 ├── test_store/          # Store layer tests
@@ -177,12 +194,20 @@ scripts/
 |-------|-------------|
 | `workBlock(id, version)` | Get a WorkBlock (latest if version omitted) |
 | `workBlocks(name, limit, offset)` | List WorkBlocks |
+| `workBlocksConnection(first, after, filter, orderBy)` | Cursor-paginated WorkBlocks |
 | `flow(id, version)` | Get a Flow |
 | `flows(name, limit, offset)` | List Flows |
+| `flowsConnection(first, after, filter, orderBy)` | Cursor-paginated Flows |
+| `flowDraft(draftId)` | Get a mutable flow draft |
+| `flowDrafts(baseFlowId, limit, offset)` | List drafts |
 | `contract(id, version)` | Get a Contract |
 | `contracts(name, limit, offset)` | List Contracts |
+| `contractsConnection(first, after, filter, orderBy)` | Cursor-paginated Contracts |
 | `requiredOutcome(id, version)` | Get a RequiredOutcome |
 | `requiredOutcomes(name, limit, offset)` | List RequiredOutcomes |
+| `canvasLayout(flowId, flowVersion)` | Get visual layout for a flow |
+| `flowCanvas(flowId, flowVersion?)` | Composite: flow + layout + WorkBlock summaries |
+| `flowExecutionCanvas(flowExecutionId)` | Composite: flow + execution + per-node states |
 | `blockExecution(id)` | Get a BlockExecution |
 | `blockExecutions(workBlockId, flowExecutionId, state, ...)` | List BlockExecutions |
 | `flowExecution(id)` | Get a FlowExecution |
@@ -195,6 +220,19 @@ scripts/
 
 **Definitions** — create / update for WorkBlock, Flow, Contract, RequiredOutcome.
 
+**Draft editing** — granular canvas-friendly flow editing:
+
+```
+createFlowDraft / createBlankFlowDraft
+  → addNodeToDraft · removeNodeFromDraft · updateNodeInDraft
+  → addEdgeToDraft · removeEdgeToDraft
+  → updateNodePositions · updateViewport
+  → publishFlowDraft → new immutable FlowDoc
+  → discardFlowDraft
+```
+
+**Canvas layout** — `saveCanvasLayout` / `deleteCanvasLayout`
+
 **Execution lifecycle** — mirrors the OpenOMA event model:
 
 ```
@@ -206,6 +244,12 @@ createBlockExecution → assignExecutorToBlock → startBlockExecution
 
 Flow and Contract executions follow the same create → add children →
 `refreshFlowState` / `refreshContractState` pattern.
+
+### Subscriptions (WebSocket)
+
+| Subscription | Description |
+|-------------|-------------|
+| `executionEvents(executionId?)` | Stream execution events in real time. Filter by execution ID or receive all. |
 
 ## Containers
 
