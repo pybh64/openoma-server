@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="OpenOMA Server",
     description="GraphQL server for the OpenOMA operational process framework",
-    version="0.1.0",
+    version="0.1.2",
     lifespan=lifespan,
 )
 
@@ -38,7 +38,14 @@ app.add_middleware(
 app.add_middleware(AuthMiddleware)
 
 # GraphQL
-graphql_router = GraphQLRouter(schema, context_getter=get_context)
+graphql_router = GraphQLRouter(
+    schema,
+    context_getter=get_context,
+    subscription_protocols=[
+        "graphql-transport-ws",
+        "graphql-ws",
+    ],
+)
 app.include_router(graphql_router, prefix="/graphql")
 
 

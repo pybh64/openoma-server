@@ -1,7 +1,7 @@
 [project]
 name = "openoma-server"
-version = "0.1.0"
-description = "GraphQL server for the OpenOMA operational process framework"
+version = "0.1.2"
+description = "GraphQL server for the Openoma operational process framework"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

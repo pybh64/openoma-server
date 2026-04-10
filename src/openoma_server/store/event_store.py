@@ -37,9 +37,17 @@ class MongoEventStore:
         return doc.to_core() if doc else None
 
     async def get_latest_events(self, execution_ids: list[UUID]) -> list[ExecutionEvent]:
-        results = []
-        for eid in execution_ids:
-            event = await self.get_latest_event(eid)
-            if event:
-                results.append(event)
+        if not execution_ids:
+            return []
+        docs = (
+            await ExecutionEventDoc.find({"execution_id": {"$in": execution_ids}})
+            .sort(-ExecutionEventDoc.timestamp)
+            .to_list()
+        )
+        seen: set[UUID] = set()
+        results: list[ExecutionEvent] = []
+        for doc in docs:
+            if doc.execution_id not in seen:
+                seen.add(doc.execution_id)
+                results.append(doc.to_core())
         return results

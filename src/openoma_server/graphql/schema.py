@@ -13,6 +13,7 @@ from openoma_server.graphql.queries.execution import ExecutionQuery
 from openoma_server.graphql.queries.flow import FlowQuery
 from openoma_server.graphql.queries.flow_draft import FlowDraftQuery
 from openoma_server.graphql.queries.work_block import WorkBlockQuery
+from openoma_server.graphql.subscriptions.execution import ExecutionSubscription
 
 
 @strawberry.type
@@ -37,7 +38,13 @@ class Mutation(
     pass
 
 
+@strawberry.type
+class Subscription(ExecutionSubscription):
+    pass
+
+
 schema = strawberry.Schema(
     query=Query,
     mutation=Mutation,
+    subscription=Subscription,
 )

@@ -51,6 +51,10 @@ async def _append_event(
     )
     doc = ExecutionEventDoc.from_core(event)
     await doc.insert()
+
+    from openoma_server.services.pubsub import event_bus
+    await event_bus.publish(doc)
+
     return doc
 
 
