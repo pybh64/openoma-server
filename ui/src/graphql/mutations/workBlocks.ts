@@ -4,8 +4,8 @@ export const CREATE_WORK_BLOCK = gql`
   mutation CreateWorkBlock($input: CreateWorkBlockInput!) {
     createWorkBlock(input: $input) {
       id version name description
-      inputs { name description required schemaDef metadata }
-      outputs { name description required schemaDef metadata }
+      inputs { name description required schema metadata }
+      outputs { name description required schema metadata }
       executionHints
       expectedOutcome { name description }
       metadata

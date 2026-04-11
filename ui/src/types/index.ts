@@ -4,14 +4,14 @@ export interface PortDescriptor {
   name: string;
   description: string;
   required: boolean;
-  schemaDef: unknown | null;
+  schema: unknown | null;
   metadata: Record<string, unknown>;
 }
 
 export interface ExpectedOutcome {
   name: string;
   description: string;
-  schemaDef: unknown | null;
+  schema: unknown | null;
   metadata: Record<string, unknown>;
 }
 

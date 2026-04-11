@@ -17,10 +17,10 @@ export const WORK_BLOCK_QUERY = gql`
   query WorkBlock($id: UUID!, $version: Int) {
     workBlock(id: $id, version: $version) {
       id version createdAt createdBy name description
-      inputs { name description required schemaDef metadata }
-      outputs { name description required schemaDef metadata }
+      inputs { name description required schema metadata }
+      outputs { name description required schema metadata }
       executionHints
-      expectedOutcome { name description schemaDef metadata }
+      expectedOutcome { name description schema metadata }
       metadata
     }
   }
