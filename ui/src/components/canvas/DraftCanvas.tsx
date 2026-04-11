@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useRef } from "react";
+import { useMemo, useCallback, useEffect, useState, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -14,13 +14,15 @@ import {
   BackgroundVariant,
   type OnSelectionChangeParams,
   type NodeChange,
+  type EdgeChange,
   type OnNodesChange,
+  MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { WorkBlockNode, type WorkBlockNodeData } from "./nodes/WorkBlockNode";
 import { EntryNode } from "./nodes/EntryNode";
-import { ConditionalEdge } from "./edges/ConditionalEdge";
+import { FlowEdge } from "./edges/FlowEdge";
 import { useCanvasStore } from "@/stores/canvasStore";
 import type { FlowDraft, NodePositionData } from "@/types";
 
@@ -30,59 +32,81 @@ const nodeTypes: NodeTypes = {
 };
 
 const edgeTypes: EdgeTypes = {
-  conditional: ConditionalEdge as unknown as EdgeTypes["conditional"],
+  flow: FlowEdge as unknown as EdgeTypes["flow"],
 };
 
 interface DraftCanvasProps {
   draft: FlowDraft;
   onConnect: (source: string, target: string) => void;
   onNodeSelect: (nodeRefId: string | null) => void;
+  onEdgeSelect?: (edge: { sourceId: string | null; targetId: string } | null) => void;
   onNodesPositionChange: (positions: NodePositionData[]) => void;
+  selectedEdge?: { sourceId: string | null; targetId: string } | null;
 }
 
 export function DraftCanvas({
   draft,
   onConnect,
   onNodeSelect,
+  onEdgeSelect,
   onNodesPositionChange,
+  selectedEdge,
 }: DraftCanvasProps) {
-  const { showMinimap, showGrid } = useCanvasStore();
-  const dragTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const { showMinimap, showGrid, snapToGrid, gridSize } = useCanvasStore();
+  // An empty object `{}` from the server default is truthy but has no valid zoom.
+  const hasValidViewport =
+    draft.viewport != null && typeof (draft.viewport as { zoom?: unknown }).zoom === "number";
+  const [fitViewOnInit, setFitViewOnInit] = useState(() => !hasValidViewport);
+  const [isNodeDragging, setIsNodeDragging] = useState(false);
+  // Track whether onNodeClick just fired so we can ignore the immediately-following
+  // spurious onSelectionChange({nodes:[], edges:[]}) that React Flow v12 sometimes emits.
+  const justSelectedNodeRef = useRef(false);
 
+  // Compute nodes AND edges together so selection styling stays in sync with draft changes.
   const { initialNodes, initialEdges } = useMemo(() => {
-    return buildDraftReactFlowData(draft);
-  }, [draft]);
+    return buildDraftReactFlowData(draft, selectedEdge);
+  }, [draft, selectedEdge]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
+
+  // Block React Flow's built-in Delete/Backspace deletion — removals go through server mutations.
   const handleNodesChange: OnNodesChange = useCallback(
     (changes: NodeChange[]) => {
-      onNodesChange(changes);
-
-      // Debounce position updates
-      const posChanges = changes.filter(
-        (c) => c.type === "position" && (c as { dragging?: boolean }).dragging === false
-      );
-      if (posChanges.length > 0) {
-        clearTimeout(dragTimeoutRef.current);
-        dragTimeoutRef.current = setTimeout(() => {
-          // Get current node positions
-          setNodes((nds) => {
-            const positions: NodePositionData[] = nds
-              .filter((n) => n.id !== "__entry__")
-              .map((n) => ({
-                nodeReferenceId: n.id,
-                x: n.position.x,
-                y: n.position.y,
-              }));
-            onNodesPositionChange(positions);
-            return nds;
-          });
-        }, 300);
-      }
+      const filtered = changes.filter((c) => c.type !== "remove");
+      if (filtered.length > 0) onNodesChange(filtered);
     },
-    [onNodesChange, onNodesPositionChange, setNodes]
+    [onNodesChange]
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      const filtered = changes.filter((c) => c.type !== "remove");
+      if (filtered.length > 0) onEdgesChange(filtered);
+    },
+    [onEdgesChange]
+  );
+
+  const handleNodeDragStart = useCallback(
+    (_event: unknown, node: Node) => {
+      setIsNodeDragging(true);
+      if (node.id === "__entry__") {
+        onNodeSelect(null);
+        onEdgeSelect?.(null);
+        return;
+      }
+      onNodeSelect(node.id);
+      onEdgeSelect?.(null);
+    },
+    [onEdgeSelect, onNodeSelect]
   );
 
   const handleConnect = useCallback(
@@ -97,69 +121,168 @@ export function DraftCanvas({
     [onConnect]
   );
 
-  const handleSelectionChange = useCallback(
-    ({ nodes: selected }: OnSelectionChangeParams) => {
-      if (selected.length === 1 && selected[0].id !== "__entry__") {
-        onNodeSelect(selected[0].id);
-      } else {
-        onNodeSelect(null);
+  // Guard against React Flow v12 bubbling pane click events from node/edge interactions.
+  // Only clear selection when the click truly originated on the canvas background.
+  const handlePaneClick = useCallback(
+    (event: unknown) => {
+      if (isNodeDragging) return;
+      const target = (event as { target?: Element }).target;
+      if (
+        target?.closest?.(".react-flow__node") ||
+        target?.closest?.(".react-flow__edge")
+      ) {
+        return;
       }
+      onNodeSelect(null);
+      onEdgeSelect?.(null);
     },
-    [onNodeSelect]
+    [isNodeDragging, onEdgeSelect, onNodeSelect],
   );
 
-  const handlePaneClick = useCallback(() => {
-    onNodeSelect(null);
-  }, [onNodeSelect]);
+  const handleSelectionChange = useCallback(
+    ({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
+      if (isNodeDragging) {
+        return;
+      }
+      const selectedWorkBlockNode = selectedNodes.find((selectedNode) => selectedNode.id !== "__entry__");
+      if (selectedWorkBlockNode) {
+        onNodeSelect(selectedWorkBlockNode.id);
+        onEdgeSelect?.(null);
+        return;
+      }
+      if (selectedEdges.length === 1) {
+        onNodeSelect(null);
+        onEdgeSelect?.({
+          sourceId:
+            selectedEdges[0].source === "__entry__" ? null : selectedEdges[0].source,
+          targetId: selectedEdges[0].target,
+        });
+        return;
+      }
+      // Empty selection — skip if onNodeClick just fired (avoids spurious deselect).
+      if (justSelectedNodeRef.current) {
+        justSelectedNodeRef.current = false;
+        return;
+      }
+      onNodeSelect(null);
+      onEdgeSelect?.(null);
+    },
+    [isNodeDragging, onEdgeSelect, onNodeSelect],
+  );
 
-  const defaultViewport = draft.viewport
-    ? { x: draft.viewport.x, y: draft.viewport.y, zoom: draft.viewport.zoom }
+  const handleNodeClick = useCallback(
+    (_event: unknown, node: Node) => {
+      if (node.id === "__entry__") {
+        onNodeSelect(null);
+        onEdgeSelect?.(null);
+        return;
+      }
+      justSelectedNodeRef.current = true;
+      onNodeSelect(node.id);
+      onEdgeSelect?.(null);
+    },
+    [onEdgeSelect, onNodeSelect]
+  );
+
+  const handleEdgeClick = useCallback(
+    (_event: unknown, edge: RFEdge) => {
+      onNodeSelect(null);
+      onEdgeSelect?.({
+        sourceId: edge.source === "__entry__" ? null : edge.source,
+        targetId: edge.target,
+      });
+    },
+    [onEdgeSelect, onNodeSelect]
+  );
+
+  const handleNodeDragStop = useCallback(
+    (_event: unknown, draggedNode: Node) => {
+      setIsNodeDragging(false);
+      const positions: NodePositionData[] = nodes
+        .filter((currentNode) => currentNode.id !== "__entry__")
+        .map((currentNode) => {
+          const position =
+            currentNode.id === draggedNode.id ? draggedNode.position : currentNode.position;
+          return {
+            nodeReferenceId: currentNode.id,
+            x: position.x,
+            y: position.y,
+          };
+        });
+      onNodesPositionChange(positions);
+    },
+    [nodes, onNodesPositionChange]
+  );
+
+  const defaultViewport = hasValidViewport
+    ? {
+        x: (draft.viewport as { x: number }).x,
+        y: (draft.viewport as { y: number }).y,
+        zoom: (draft.viewport as { zoom: number }).zoom,
+      }
     : { x: 100, y: 100, zoom: 0.85 };
 
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      onNodesChange={handleNodesChange}
-      onEdgesChange={onEdgesChange}
-      onConnect={handleConnect}
-      onSelectionChange={handleSelectionChange}
-      onPaneClick={handlePaneClick}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      defaultViewport={defaultViewport}
-      fitView={!draft.viewport}
-      fitViewOptions={{ padding: 0.2 }}
-      nodesDraggable
-      nodesConnectable
-      elementsSelectable
-      selectNodesOnDrag={false}
-      snapToGrid
-      snapGrid={[20, 20]}
-      proOptions={{ hideAttribution: true }}
-    >
-      {showGrid && <Background variant={BackgroundVariant.Dots} gap={20} size={1} />}
-      <Controls showInteractive={false} />
-      {showMinimap && (
-        <MiniMap
-          nodeStrokeWidth={3}
-          pannable
-          zoomable
-          style={{ width: 150, height: 100 }}
-        />
-      )}
-    </ReactFlow>
+    // React Flow requires an explicit-height parent container.
+    <div className="w-full h-full">
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
+        onNodeDragStart={handleNodeDragStart}
+        onNodeDragStop={handleNodeDragStop}
+        onNodeClick={handleNodeClick}
+        onEdgeClick={handleEdgeClick}
+        onConnect={handleConnect}
+        onSelectionChange={handleSelectionChange}
+        onPaneClick={handlePaneClick}
+        onInit={() => setFitViewOnInit(false)}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        defaultViewport={defaultViewport}
+        fitView={fitViewOnInit}
+        fitViewOptions={{ padding: 0.2 }}
+        nodesDraggable
+        nodesConnectable
+        edgesFocusable
+        elementsSelectable
+        selectNodesOnDrag={false}
+        selectionOnDrag={false}
+        snapToGrid={snapToGrid}
+        snapGrid={[gridSize, gridSize]}
+        elevateEdgesOnSelect
+        // Disable built-in Delete/Backspace key so only server-side deletion is allowed.
+        deleteKeyCode={null}
+        connectionLineStyle={{ stroke: "var(--color-primary)", strokeWidth: 2 }}
+        proOptions={{ hideAttribution: true }}
+      >
+        {showGrid && <Background variant={BackgroundVariant.Dots} gap={20} size={1} />}
+        <Controls showInteractive={false} />
+        {showMinimap && (
+          <MiniMap
+            nodeStrokeWidth={3}
+            pannable
+            zoomable
+            style={{ width: 150, height: 100 }}
+          />
+        )}
+      </ReactFlow>
+    </div>
   );
 }
 
-function buildDraftReactFlowData(draft: FlowDraft): {
+function buildDraftReactFlowData(
+  draft: FlowDraft,
+  selectedEdge?: { sourceId: string | null; targetId: string } | null,
+): {
   initialNodes: Node[];
   initialEdges: RFEdge[];
 } {
   const posMap = new Map<string, { x: number; y: number }>();
   if (draft.nodePositions) {
     for (const np of draft.nodePositions) {
-      const nri = (np as any).nodeReferenceId ?? (np as any).node_reference_id;
+      const nri = getNodePositionId(np);
       if (nri) posMap.set(nri, { x: np.x, y: np.y });
     }
   }
@@ -174,7 +297,7 @@ function buildDraftReactFlowData(draft: FlowDraft): {
       type: "entry",
       position: { x: 0, y: 150 },
       data: { label: "Start" },
-      draggable: true,
+      draggable: false,
     });
   }
 
@@ -202,13 +325,32 @@ function buildDraftReactFlowData(draft: FlowDraft): {
     });
   });
 
-  const rfEdges: RFEdge[] = draft.edges.map((e, idx) => ({
-    id: `e-${e.sourceId ?? "entry"}-${e.targetId}-${idx}`,
-    source: e.sourceId ?? "__entry__",
-    target: e.targetId,
-    type: e.condition ? "conditional" : "default",
-    data: e.condition ? { conditionDescription: e.condition.description } : undefined,
-  }));
+  const rfEdges: RFEdge[] = draft.edges.map((e, idx) => {
+    const sourceId = e.sourceId ?? null;
+    const isSelected =
+      selectedEdge != null &&
+      selectedEdge.sourceId === sourceId &&
+      selectedEdge.targetId === e.targetId;
+    return {
+      id: `e-${e.sourceId ?? "entry"}-${e.targetId}-${idx}`,
+      source: e.sourceId ?? "__entry__",
+      target: e.targetId,
+      type: "flow",
+      selected: isSelected,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: isSelected ? "var(--color-primary)" : "var(--color-muted-foreground)",
+      },
+      data: {
+        conditionDescription: e.condition?.description,
+        portMappings: e.portMappings,
+      },
+    };
+  });
 
   return { initialNodes: nodes, initialEdges: rfEdges };
+}
+
+function getNodePositionId(position: NodePositionData & { node_reference_id?: string }): string {
+  return position.nodeReferenceId ?? position.node_reference_id ?? "";
 }
