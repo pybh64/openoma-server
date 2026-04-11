@@ -5,8 +5,13 @@ export const FLOW_DRAFT_QUERY = gql`
     flowDraft(draftId: $draftId) {
       draftId baseFlowId baseFlowVersion name description
       nodes {
-        id targetId targetVersion alias metadata
-        workBlock { id version name description executionHints inputs { name description required } outputs { name description required } }
+        id targetId targetVersion alias executionSchedule metadata
+        workBlock {
+          id version name description executionHints metadata
+          inputs { name description required schema metadata }
+          outputs { name description required schema metadata }
+          expectedOutcome { name description schema metadata }
+        }
       }
       edges {
         sourceId targetId
@@ -25,7 +30,7 @@ export const FLOW_DRAFTS_QUERY = gql`
   query FlowDrafts($baseFlowId: UUID, $limit: Int, $offset: Int) {
     flowDrafts(baseFlowId: $baseFlowId, limit: $limit, offset: $offset) {
       draftId baseFlowId baseFlowVersion name description
-      nodes { id targetId targetVersion alias }
+      nodes { id targetId targetVersion alias executionSchedule }
       edges { sourceId targetId }
       createdAt updatedAt
     }

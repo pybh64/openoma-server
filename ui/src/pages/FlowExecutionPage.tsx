@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { LoadingState, ErrorState } from "@/components/shared/StateDisplay";
-import { formatDate, executionStateColor } from "@/lib/utils";
+import { formatDate, executionStateColor, formatJson } from "@/lib/utils";
 import type { NodeReference, ExecutionEvent, NodeExecutionState } from "@/types";
 
 export function FlowExecutionPage() {
@@ -21,10 +21,15 @@ export function FlowExecutionPage() {
     pause: !id,
   });
 
+  const activeExecutionId =
+    data?.flowExecutionCanvas?.nodeStates.find(
+      (nodeState: NodeExecutionState) => nodeState.nodeReferenceId === selectedNodeId,
+    )?.blockExecutionId ?? id;
+
   const [{ data: eventsData }] = useQuery({
     query: EXECUTION_EVENTS_QUERY,
-    variables: { executionId: id },
-    pause: !id,
+    variables: { executionId: activeExecutionId },
+    pause: !activeExecutionId,
   });
 
   if (fetching) return <LoadingState message="Loading execution..." />;
@@ -88,14 +93,23 @@ export function FlowExecutionPage() {
                     Executor: {selectedNodeState.executor.identifier} ({selectedNodeState.executor.type})
                   </div>
                 )}
+                {selectedNodeState?.outcome && (
+                  <div className="mt-3 rounded-md bg-muted/50 p-2">
+                    <div className="text-xs font-medium">Latest Outcome</div>
+                    <pre className="mt-1 overflow-x-auto text-[11px] text-muted-foreground">
+                      {formatJson(selectedNodeState.outcome.value)}
+                    </pre>
+                  </div>
+                )}
               </div>
               <ScrollArea className="flex-1 p-3">
                 <div className="space-y-2">
-                  {events
-                    .filter((e) => e.executionId === selectedNodeState?.blockExecutionId)
-                    .map((event) => (
-                      <EventCard key={event.id} event={event} />
-                    ))}
+                  {events.map((event) => (
+                    <EventCard key={event.id} event={event} />
+                  ))}
+                  {events.length === 0 && (
+                    <p className="text-xs text-muted-foreground text-center py-4">No block events yet</p>
+                  )}
                 </div>
               </ScrollArea>
             </div>
@@ -137,6 +151,11 @@ function EventCard({ event }: { event: ExecutionEvent }) {
           <div className="text-[11px] text-muted-foreground mt-1">
             {event.executor.identifier} ({event.executor.type})
           </div>
+        )}
+        {event.outcome && (
+          <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-[10px] text-muted-foreground">
+            {formatJson(event.outcome.value)}
+          </pre>
         )}
       </CardContent>
     </Card>

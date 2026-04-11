@@ -40,6 +40,7 @@ class NodeReferenceDoc(BaseModel):
     target_id: UUID
     target_version: int
     alias: str | None = None
+    execution_schedule: str | None = None
     metadata: dict = Field(default_factory=dict)
 
 

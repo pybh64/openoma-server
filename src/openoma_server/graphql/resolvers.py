@@ -189,6 +189,7 @@ def _node_ref(n: NodeReferenceDoc) -> NodeReferenceType:
         target_id=n.target_id,
         target_version=n.target_version,
         alias=n.alias,
+        execution_schedule=n.execution_schedule,
         metadata=n.metadata,
     )
 
@@ -339,6 +340,11 @@ def block_execution_to_gql(doc: BlockExecutionDoc) -> BlockExecutionType:
         node_reference_id=doc.node_reference_id,
         work_block_id=doc.work_block_id,
         work_block_version=doc.work_block_version,
+        outcome=(
+            ExecutionOutcomeType(value=doc.outcome.value, metadata=doc.outcome.metadata)
+            if doc.outcome
+            else None
+        ),
         state=doc.state,
         created_at=doc.created_at,
     )

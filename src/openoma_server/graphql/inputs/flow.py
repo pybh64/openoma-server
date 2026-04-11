@@ -25,6 +25,7 @@ class NodeReferenceInput:
     target_id: UUID
     target_version: int
     alias: str | None = None
+    execution_schedule: str | None = None
     metadata: JSON | None = None
 
 

@@ -5,17 +5,22 @@ import { Edit3, Eye } from "lucide-react";
 import { FLOW_CANVAS_QUERY } from "@/graphql/queries/flows";
 import { CREATE_FLOW_DRAFT } from "@/graphql/mutations/flowDrafts";
 import { FlowCanvas } from "@/components/canvas/FlowCanvas";
+import { EdgeDetailPanel } from "@/components/canvas/panels/EdgeDetailPanel";
 import { NodeDetailPanel } from "@/components/canvas/panels/NodeDetailPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LoadingState, ErrorState } from "@/components/shared/StateDisplay";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { NodeReference } from "@/types";
+import type { Edge, NodeReference } from "@/types";
 
 export function FlowCanvasPage() {
   const { id, version } = useParams<{ id: string; version?: string }>();
   const navigate = useNavigate();
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<{
+    sourceId: string | null;
+    targetId: string;
+  } | null>(null);
 
   const [{ data, fetching, error }] = useQuery({
     query: FLOW_CANVAS_QUERY,
@@ -42,6 +47,13 @@ export function FlowCanvasPage() {
   const selectedNode = selectedNodeId
     ? flow.nodes.find((n: NodeReference) => n.id === selectedNodeId) ?? null
     : null;
+  const currentEdge = selectedEdge
+    ? flow.edges.find(
+        (edge: Edge) =>
+          edge.sourceId === selectedEdge.sourceId &&
+          edge.targetId === selectedEdge.targetId,
+      ) ?? null
+    : null;
 
   return (
     <div className="flex flex-col h-full">
@@ -63,10 +75,10 @@ export function FlowCanvasPage() {
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="outline" size="sm" onClick={handleEdit}>
-              <Edit3 className="h-3.5 w-3.5 mr-1" /> Edit as Draft
+              <Edit3 className="h-3.5 w-3.5 mr-1" /> Create New Version Draft
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Create a mutable draft from this version</TooltipContent>
+          <TooltipContent>Create a draft, edit it, then publish as the next flow version</TooltipContent>
         </Tooltip>
       </div>
 
@@ -78,6 +90,8 @@ export function FlowCanvasPage() {
             layout={layout}
             workBlockSummaries={workBlockSummaries}
             onNodeSelect={setSelectedNodeId}
+            onEdgeSelect={setSelectedEdge}
+            selectedEdge={selectedEdge}
           />
         </div>
 
@@ -87,6 +101,14 @@ export function FlowCanvasPage() {
             edges={flow.edges}
             allNodes={flow.nodes}
             onClose={() => setSelectedNodeId(null)}
+          />
+        )}
+
+        {!selectedNode && currentEdge && (
+          <EdgeDetailPanel
+            edge={currentEdge}
+            allNodes={flow.nodes}
+            onClose={() => setSelectedEdge(null)}
           />
         )}
       </div>

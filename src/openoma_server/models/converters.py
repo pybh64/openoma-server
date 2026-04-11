@@ -101,6 +101,7 @@ def node_ref_to_doc(n: NodeReference) -> NodeReferenceDoc:
         target_id=n.target_id,
         target_version=n.target_version,
         alias=n.alias,
+        execution_schedule=n.execution_schedule,
         metadata=n.metadata,
     )
 
@@ -111,6 +112,7 @@ def node_ref_from_doc(d: NodeReferenceDoc) -> NodeReference:
         target_id=d.target_id,
         target_version=d.target_version,
         alias=d.alias,
+        execution_schedule=d.execution_schedule,
         metadata=d.metadata,
     )
 

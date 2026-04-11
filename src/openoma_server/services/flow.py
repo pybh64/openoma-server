@@ -27,6 +27,7 @@ def _convert_node_ref(n: NodeReferenceInput) -> NodeReference:
         target_id=n.target_id,
         target_version=n.target_version,
         alias=n.alias,
+        execution_schedule=n.execution_schedule,
         metadata=n.metadata or {},
     )
 

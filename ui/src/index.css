@@ -55,6 +55,15 @@
 /* React Flow overrides */
 .react-flow__node {
   z-index: 5 !important;
+  cursor: grab;
+}
+
+.react-flow__node.dragging {
+  cursor: grabbing;
+}
+
+.react-flow__edge {
+  z-index: 4 !important;
 }
 
 .react-flow__handle {
@@ -76,11 +85,17 @@
 .react-flow__edge-path {
   stroke: var(--color-muted-foreground);
   stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .react-flow__edge.selected .react-flow__edge-path {
   stroke: var(--color-primary);
   stroke-width: 3;
+}
+
+.react-flow__edge.selected {
+  z-index: 6 !important;
 }
 
 .react-flow__minimap {

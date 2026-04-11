@@ -53,6 +53,7 @@ export interface NodeReference {
   targetId: string;
   targetVersion: number;
   alias: string | null;
+  executionSchedule: string | null;
   metadata: Record<string, unknown>;
   workBlock?: WorkBlock | null;
 }
@@ -213,6 +214,7 @@ export interface BlockExecution {
   nodeReferenceId: string;
   workBlockId: string;
   workBlockVersion: number;
+  outcome: ExecutionOutcome | null;
   state: string;
   createdAt: string;
 }
@@ -241,6 +243,7 @@ export interface NodeExecutionState {
   nodeReferenceId: string;
   blockExecutionId: string | null;
   state: string | null;
+  outcome: ExecutionOutcome | null;
   executor: ExecutorInfo | null;
   latestEvent: ExecutionEvent | null;
 }

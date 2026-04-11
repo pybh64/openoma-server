@@ -17,6 +17,7 @@ from openoma_server.models.embedded import (
 )
 from openoma_server.models.flow import FlowDoc
 from openoma_server.models.flow_draft import FlowDraftDoc
+from openoma_server.models.work_block import WorkBlockDoc
 
 
 def _node_input_to_doc(n: NodeReferenceInput) -> NodeReferenceDoc:
@@ -25,6 +26,7 @@ def _node_input_to_doc(n: NodeReferenceInput) -> NodeReferenceDoc:
         target_id=n.target_id,
         target_version=n.target_version,
         alias=n.alias,
+        execution_schedule=n.execution_schedule,
         metadata=n.metadata or {},
     )
 
@@ -223,18 +225,40 @@ async def remove_node_from_draft(draft_id: UUID, node_reference_id: UUID) -> Flo
 async def update_node_in_draft(
     draft_id: UUID,
     node_reference_id: UUID,
+    target_id: UUID | None = None,
+    target_version: int | None = None,
     alias: str | None = None,
+    execution_schedule: str | None = None,
     metadata: dict | None = None,
 ) -> FlowDraftDoc:
-    """Update a node's alias or metadata."""
+    """Update a node's referenced block, alias, execution schedule, or metadata."""
     draft = await get_draft(draft_id)
     if draft is None:
         raise ValueError(f"Draft {draft_id} not found")
 
     for node in draft.nodes:
         if node.id == node_reference_id:
+            next_target_id = target_id if target_id is not None else node.target_id
+            next_target_version = (
+                target_version if target_version is not None else node.target_version
+            )
+            if (
+                next_target_id != node.target_id
+                or next_target_version != node.target_version
+            ):
+                work_block_doc = await WorkBlockDoc.get_by_version(
+                    next_target_id, next_target_version
+                )
+                if work_block_doc is None:
+                    raise ValueError(
+                        f"WorkBlock {next_target_id} version {next_target_version} not found"
+                    )
+                node.target_id = next_target_id
+                node.target_version = next_target_version
             if alias is not None:
                 node.alias = alias
+            if execution_schedule is not None:
+                node.execution_schedule = execution_schedule
             if metadata is not None:
                 node.metadata = metadata
             break
@@ -282,6 +306,35 @@ async def remove_edge_from_draft(
     draft.edges = [
         e for e in draft.edges if not (e.source_id == source_id and e.target_id == target_id)
     ]
+
+    draft.updated_at = datetime.now(UTC)
+    await draft.save()
+    return draft
+
+
+async def update_edge_in_draft(
+    draft_id: UUID,
+    source_id: UUID | None,
+    target_id: UUID,
+    edge: EdgeInput,
+) -> FlowDraftDoc:
+    """Update an edge identified by (source_id, target_id)."""
+    draft = await get_draft(draft_id)
+    if draft is None:
+        raise ValueError(f"Draft {draft_id} not found")
+
+    node_ids = {n.id for n in draft.nodes}
+    if edge.target_id not in node_ids:
+        raise ValueError(f"Edge target_id {edge.target_id} does not reference a node in this draft")
+    if edge.source_id is not None and edge.source_id not in node_ids:
+        raise ValueError(f"Edge source_id {edge.source_id} does not reference a node in this draft")
+
+    for index, existing_edge in enumerate(draft.edges):
+        if existing_edge.source_id == source_id and existing_edge.target_id == target_id:
+            draft.edges[index] = _edge_input_to_doc(edge)
+            break
+    else:
+        raise ValueError(f"Edge ({source_id}, {target_id}) not found in draft")
 
     draft.updated_at = datetime.now(UTC)
     await draft.save()

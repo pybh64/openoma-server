@@ -92,7 +92,10 @@ class FlowDraftMutation:
         doc = await draft_service.update_node_in_draft(
             draft_id,
             node_reference_id,
+            target_id=input.target_id,
+            target_version=input.target_version,
             alias=input.alias,
+            execution_schedule=input.execution_schedule,
             metadata=input.metadata,
         )
         return flow_draft_to_gql(doc)
@@ -109,6 +112,19 @@ class FlowDraftMutation:
         self, draft_id: UUID, source_id: UUID | None, target_id: UUID
     ) -> FlowDraftType:
         doc = await draft_service.remove_edge_from_draft(draft_id, source_id, target_id)
+        return flow_draft_to_gql(doc)
+
+    @strawberry.mutation
+    async def update_edge_in_draft(
+        self,
+        draft_id: UUID,
+        source_id: UUID | None,
+        target_id: UUID,
+        edge: EdgeInput,
+    ) -> FlowDraftType:
+        doc = await draft_service.update_edge_in_draft(
+            draft_id, source_id, target_id, edge
+        )
         return flow_draft_to_gql(doc)
 
     # ── Layout operations ─────────────────────────────────────────

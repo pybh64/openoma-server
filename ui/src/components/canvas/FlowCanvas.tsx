@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useEffect, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -12,12 +12,13 @@ import {
   useEdgesState,
   BackgroundVariant,
   type OnSelectionChangeParams,
+  MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
 import { WorkBlockNode, type WorkBlockNodeData } from "./nodes/WorkBlockNode";
 import { EntryNode } from "./nodes/EntryNode";
-import { ConditionalEdge } from "./edges/ConditionalEdge";
+import { FlowEdge } from "./edges/FlowEdge";
 import { useCanvasStore } from "@/stores/canvasStore";
 import type {
   Flow,
@@ -32,7 +33,7 @@ const nodeTypes: NodeTypes = {
 };
 
 const edgeTypes: EdgeTypes = {
-  conditional: ConditionalEdge as unknown as EdgeTypes["conditional"],
+  flow: FlowEdge as unknown as EdgeTypes["flow"],
 };
 
 interface FlowCanvasProps {
@@ -41,6 +42,8 @@ interface FlowCanvasProps {
   workBlockSummaries?: WorkBlockSummary[];
   nodeStates?: NodeExecutionState[];
   onNodeSelect?: (nodeRefId: string | null) => void;
+  onEdgeSelect?: (edge: { sourceId: string | null; targetId: string } | null) => void;
+  selectedEdge?: { sourceId: string | null; targetId: string } | null;
   readOnly?: boolean;
 }
 
@@ -50,31 +53,74 @@ export function FlowCanvas({
   workBlockSummaries,
   nodeStates,
   onNodeSelect,
+  onEdgeSelect,
+  selectedEdge,
   readOnly = true,
 }: FlowCanvasProps) {
   const { showMinimap, showGrid } = useCanvasStore();
+  const [fitViewOnInit, setFitViewOnInit] = useState(() => !layout?.viewport);
 
   const { initialNodes, initialEdges } = useMemo(() => {
-    return buildReactFlowData(flow, layout, workBlockSummaries, nodeStates);
-  }, [flow, layout, workBlockSummaries, nodeStates]);
+    return buildReactFlowData(flow, layout, workBlockSummaries, nodeStates, selectedEdge);
+  }, [flow, layout, workBlockSummaries, nodeStates, selectedEdge]);
 
-  const [nodes, , onNodesChange] = useNodesState(initialNodes);
-  const [edges, , onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+
+  useEffect(() => {
+    setNodes(initialNodes);
+  }, [initialNodes, setNodes]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
 
   const handleSelectionChange = useCallback(
-    ({ nodes: selectedNodes }: OnSelectionChangeParams) => {
+    ({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
       if (selectedNodes.length === 1) {
         onNodeSelect?.(selectedNodes[0].id);
+        onEdgeSelect?.(null);
+      } else if (selectedEdges.length === 1) {
+        onNodeSelect?.(null);
+        onEdgeSelect?.({
+          sourceId: selectedEdges[0].source === "__entry__" ? null : selectedEdges[0].source,
+          targetId: selectedEdges[0].target,
+        });
       } else {
         onNodeSelect?.(null);
+        onEdgeSelect?.(null);
       }
     },
-    [onNodeSelect]
+    [onEdgeSelect, onNodeSelect]
   );
 
   const handlePaneClick = useCallback(() => {
     onNodeSelect?.(null);
-  }, [onNodeSelect]);
+    onEdgeSelect?.(null);
+  }, [onEdgeSelect, onNodeSelect]);
+
+  const handleNodeClick = useCallback(
+    (_event: unknown, node: Node) => {
+      if (node.id === "__entry__") {
+        onNodeSelect?.(null);
+        return;
+      }
+      onNodeSelect?.(node.id);
+      onEdgeSelect?.(null);
+    },
+    [onEdgeSelect, onNodeSelect]
+  );
+
+  const handleEdgeClick = useCallback(
+    (_event: unknown, edge: RFEdge) => {
+      onNodeSelect?.(null);
+      onEdgeSelect?.({
+        sourceId: edge.source === "__entry__" ? null : edge.source,
+        targetId: edge.target,
+      });
+    },
+    [onEdgeSelect, onNodeSelect]
+  );
 
   const defaultViewport = layout?.viewport
     ? { x: layout.viewport.x, y: layout.viewport.y, zoom: layout.viewport.zoom }
@@ -85,18 +131,24 @@ export function FlowCanvas({
       nodes={nodes}
       edges={edges}
       onNodesChange={readOnly ? undefined : onNodesChange}
-      onEdgesChange={readOnly ? undefined : onEdgesChange}
+      onEdgesChange={onEdgesChange}
+      onNodeClick={handleNodeClick}
+      onEdgeClick={handleEdgeClick}
       onSelectionChange={handleSelectionChange}
       onPaneClick={handlePaneClick}
+      onInit={() => setFitViewOnInit(false)}
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       defaultViewport={defaultViewport}
-      fitView={!layout?.viewport}
+      fitView={fitViewOnInit}
       fitViewOptions={{ padding: 0.2 }}
       nodesDraggable={!readOnly}
       nodesConnectable={false}
+      edgesFocusable
       elementsSelectable
       selectNodesOnDrag={false}
+      selectionOnDrag={false}
+      elevateEdgesOnSelect
       proOptions={{ hideAttribution: true }}
     >
       {showGrid && <Background variant={BackgroundVariant.Dots} gap={20} size={1} />}
@@ -117,7 +169,8 @@ function buildReactFlowData(
   flow: Flow,
   layout: CanvasLayout | null,
   summaries?: WorkBlockSummary[],
-  nodeStates?: NodeExecutionState[]
+  nodeStates?: NodeExecutionState[],
+  selectedEdge?: { sourceId: string | null; targetId: string } | null
 ): { initialNodes: Node[]; initialEdges: RFEdge[] } {
   const posMap = new Map<string, { x: number; y: number; width?: number | null; height?: number | null }>();
   if (layout?.nodePositions) {
@@ -164,8 +217,8 @@ function buildReactFlowData(
       label: wb?.name || `Block ${idx + 1}`,
       description: wb?.description || "",
       executionHints: wb?.executionHints || [],
-      inputCount: (nodeRef.workBlock as any)?.inputs?.length ?? 0,
-      outputCount: (nodeRef.workBlock as any)?.outputs?.length ?? 0,
+      inputCount: nodeRef.workBlock?.inputs?.length ?? 0,
+      outputCount: nodeRef.workBlock?.outputs?.length ?? 0,
       workBlockId: nodeRef.targetId,
       workBlockVersion: nodeRef.targetVersion,
       alias: nodeRef.alias,
@@ -188,8 +241,22 @@ function buildReactFlowData(
     id: `e-${e.sourceId ?? "entry"}-${e.targetId}-${idx}`,
     source: e.sourceId ?? "__entry__",
     target: e.targetId,
-    type: e.condition ? "conditional" : "default",
-    data: e.condition ? { conditionDescription: e.condition.description } : undefined,
+    type: "flow",
+    selected:
+      selectedEdge?.sourceId === e.sourceId &&
+      selectedEdge?.targetId === e.targetId,
+    markerEnd: {
+      type: MarkerType.ArrowClosed,
+      color:
+        selectedEdge?.sourceId === e.sourceId &&
+        selectedEdge?.targetId === e.targetId
+          ? "var(--color-primary)"
+          : "var(--color-muted-foreground)",
+    },
+    data: {
+      conditionDescription: e.condition?.description,
+      portMappings: e.portMappings,
+    },
     animated: stateMap.get(e.targetId)?.state === "in_progress",
   }));
 

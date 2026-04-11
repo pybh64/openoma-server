@@ -18,7 +18,10 @@ from openoma_server.graphql.types.canvas import (
     NodeExecutionStateType,
     WorkBlockSummaryType,
 )
-from openoma_server.graphql.types.execution import ExecutorInfoType
+from openoma_server.graphql.types.execution import (
+    ExecutionOutcomeType,
+    ExecutorInfoType,
+)
 from openoma_server.services.canvas import (
     get_flow_canvas_data,
     get_flow_execution_canvas_data,
@@ -67,6 +70,14 @@ class CanvasQuery:
                     node_reference_id=be.node_reference_id,
                     block_execution_id=be.execution_id,
                     state=be.state,
+                    outcome=(
+                        ExecutionOutcomeType(
+                            value=be.outcome.value,
+                            metadata=be.outcome.metadata,
+                        )
+                        if be.outcome
+                        else None
+                    ),
                     executor=(
                         ExecutorInfoType(
                             type=event_doc.executor.type,

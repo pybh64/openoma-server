@@ -38,7 +38,7 @@ query FlowCanvas($flowId: UUID!, $flowVersion: Int) {
       id
       version
       name
-      nodes { id targetId targetVersion alias }
+      nodes { id targetId targetVersion alias executionSchedule }
     }
     layout {
       flowId
@@ -72,13 +72,14 @@ query FlowExecutionCanvas($flowExecutionId: UUID!) {
       flowId
       state
     }
-    nodeStates {
-      nodeReferenceId
-      blockExecutionId
-      state
-      executor { type identifier }
-      latestEvent { id eventType }
-    }
+      nodeStates {
+        nodeReferenceId
+        blockExecutionId
+        state
+        outcome { value metadata }
+        executor { type identifier }
+        latestEvent { id eventType }
+      }
   }
 }
 """
@@ -114,7 +115,13 @@ async def _create_flow_with_nodes(
             "input": {
                 "name": name,
                 "nodes": [
-                    {"id": n1, "targetId": wb_id, "targetVersion": 1, "alias": "step1"},
+                    {
+                        "id": n1,
+                        "targetId": wb_id,
+                        "targetVersion": 1,
+                        "alias": "step1",
+                        "executionSchedule": "cron: 0 9 * * 1-5",
+                    },
                     {"id": n2, "targetId": wb_id, "targetVersion": 1, "alias": "step2"},
                 ],
                 "edges": [
@@ -146,6 +153,7 @@ async def test_flow_canvas_returns_flow_and_summaries():
 
     assert data["flow"]["name"] == "Canvas Flow"
     assert len(data["flow"]["nodes"]) == 2
+    assert data["flow"]["nodes"][0]["executionSchedule"] == "cron: 0 9 * * 1-5"
 
     summaries = data["workBlockSummaries"]
     assert len(summaries) >= 1
@@ -237,6 +245,7 @@ async def test_flow_execution_canvas():
         node_reference_id=uuid.UUID(node_ids[0]),
         work_block_id=wb_id,
         work_block_version=1,
+        outcome={"value": {"approved": True}, "metadata": {"source": "qa"}},
         state="assigned",
     ).insert()
 
@@ -261,6 +270,8 @@ async def test_flow_execution_canvas():
     ns = data["nodeStates"][0]
     assert ns["nodeReferenceId"] == node_ids[0]
     assert ns["state"] == "assigned"
+    assert ns["outcome"]["value"] == {"approved": True}
+    assert ns["outcome"]["metadata"]["source"] == "qa"
     assert ns["executor"]["type"] == "human"
     assert ns["executor"]["identifier"] == "alice"
     assert ns["latestEvent"]["eventType"] == "assigned"

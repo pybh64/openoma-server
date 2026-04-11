@@ -1,22 +1,28 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import { ArrowRight, GitBranch, FileText, Target } from "lucide-react";
 import { CONTRACT_QUERY } from "@/graphql/queries/contracts";
 import { FLOW_QUERY } from "@/graphql/queries/flows";
+import { UPDATE_CONTRACT } from "@/graphql/mutations/contracts";
+import { ContractFormDialog } from "@/components/contracts/ContractFormDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/shared/StateDisplay";
 import { formatDate, shortId } from "@/lib/utils";
 import type { FlowReference, ContractReference, RequiredOutcomeReference, Party } from "@/types";
 
 export function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [{ data, fetching, error }] = useQuery({
+  const [showEdit, setShowEdit] = useState(false);
+  const [{ data, fetching, error }, reexecute] = useQuery({
     query: CONTRACT_QUERY,
     variables: { id },
     pause: !id,
   });
+  const [, updateContract] = useMutation(UPDATE_CONTRACT);
 
   if (fetching) return <LoadingState />;
   if (error) return <ErrorState message={error.message} />;
@@ -33,7 +39,14 @@ export function ContractDetailPage() {
         ]}
         title={contract.name}
         description={contract.description}
-        actions={<Badge variant="outline">v{contract.version}</Badge>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">v{contract.version}</Badge>
+            <Button size="sm" onClick={() => setShowEdit(true)}>
+              Create New Version
+            </Button>
+          </div>
+        }
       />
 
       <div className="p-6 space-y-6">
@@ -136,6 +149,28 @@ export function ContractDetailPage() {
           </Card>
         )}
       </div>
+
+      <ContractFormDialog
+        open={showEdit}
+        onOpenChange={setShowEdit}
+        title={`Edit ${contract.name}`}
+        submitLabel="Save New Version"
+        initialValue={{
+          name: contract.name,
+          description: contract.description,
+          owners: contract.owners,
+          workFlows: contract.workFlows,
+          subContracts: contract.subContracts,
+          requiredOutcomes: contract.requiredOutcomes,
+          metadata: contract.metadata,
+        }}
+        onSubmit={async (input) => {
+          const result = await updateContract({ id: contract.id, input });
+          if (result.data?.updateContract) {
+            await reexecute({ requestPolicy: "network-only" });
+          }
+        }}
+      />
     </div>
   );
 }

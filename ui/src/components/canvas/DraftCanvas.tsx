@@ -186,10 +186,10 @@ export function DraftCanvas({
 
   const defaultViewport = hasValidViewport
     ? {
-        x: (draft.viewport as { x: number }).x,
-        y: (draft.viewport as { y: number }).y,
-        zoom: (draft.viewport as { zoom: number }).zoom,
-      }
+      x: (draft.viewport as { x: number }).x,
+      y: (draft.viewport as { y: number }).y,
+      zoom: (draft.viewport as { zoom: number }).zoom,
+    }
     : { x: 100, y: 100, zoom: 0.85 };
 
   return (

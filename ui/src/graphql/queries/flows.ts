@@ -4,7 +4,7 @@ export const FLOWS_QUERY = gql`
   query Flows($name: String, $limit: Int, $offset: Int) {
     flows(name: $name, limit: $limit, offset: $offset) {
       id version createdAt name description
-      nodes { id targetId targetVersion alias }
+      nodes { id targetId targetVersion alias executionSchedule }
       edges { sourceId targetId }
       metadata
     }
@@ -16,7 +16,7 @@ export const FLOW_QUERY = gql`
     flow(id: $id, version: $version) {
       id version createdAt createdBy name description
       nodes {
-        id targetId targetVersion alias metadata
+        id targetId targetVersion alias executionSchedule metadata
         workBlock { id version name description executionHints inputs { name description required } outputs { name description required } }
       }
       edges {
@@ -46,7 +46,7 @@ export const FLOW_CANVAS_QUERY = gql`
       flow {
         id version name description createdAt
         nodes {
-          id targetId targetVersion alias metadata
+          id targetId targetVersion alias executionSchedule metadata
           workBlock { id version name description executionHints inputs { name description required } outputs { name description required } }
         }
         edges {
@@ -76,7 +76,7 @@ export const FLOW_EXECUTION_CANVAS_QUERY = gql`
     flowExecutionCanvas(flowExecutionId: $flowExecutionId) {
       flow {
         id version name description
-        nodes { id targetId targetVersion alias metadata workBlock { id version name description } }
+        nodes { id targetId targetVersion alias executionSchedule metadata workBlock { id version name description } }
         edges { sourceId targetId condition { description } }
       }
       layout {
@@ -84,11 +84,16 @@ export const FLOW_EXECUTION_CANVAS_QUERY = gql`
         edgeLayouts { sourceId targetId bendPoints }
         viewport
       }
-      execution { id flowId flowVersion state createdAt }
+      execution {
+        id flowId flowVersion state createdAt
+        blockExecutions {
+          id nodeReferenceId workBlockId workBlockVersion outcome { value metadata } state createdAt
+        }
+      }
       nodeStates {
-        nodeReferenceId blockExecutionId state
+        nodeReferenceId blockExecutionId state outcome { value metadata }
         executor { type identifier }
-        latestEvent { id timestamp eventType }
+        latestEvent { id timestamp eventType outcome { value metadata } }
       }
     }
   }

@@ -1,20 +1,26 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { useQuery } from "urql";
+import { useMutation, useQuery } from "urql";
 import { WORK_BLOCK_QUERY } from "@/graphql/queries/workBlocks";
+import { UPDATE_WORK_BLOCK } from "@/graphql/mutations/workBlocks";
+import { WorkBlockFormDialog } from "@/components/work-blocks/WorkBlockFormDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState } from "@/components/shared/StateDisplay";
 import { formatDate } from "@/lib/utils";
 import type { PortDescriptor } from "@/types";
 
 export function WorkBlockDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [{ data, fetching, error }] = useQuery({
+  const [showEdit, setShowEdit] = useState(false);
+  const [{ data, fetching, error }, reexecute] = useQuery({
     query: WORK_BLOCK_QUERY,
     variables: { id },
     pause: !id,
   });
+  const [, updateWorkBlock] = useMutation(UPDATE_WORK_BLOCK);
 
   if (fetching) return <LoadingState />;
   if (error) return <ErrorState message={error.message} />;
@@ -32,7 +38,12 @@ export function WorkBlockDetailPage() {
         title={wb.name}
         description={wb.description}
         actions={
-          <Badge variant="outline">v{wb.version}</Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline">v{wb.version}</Badge>
+            <Button size="sm" onClick={() => setShowEdit(true)}>
+              Create New Version
+            </Button>
+          </div>
         }
       />
 
@@ -108,6 +119,26 @@ export function WorkBlockDetailPage() {
           </Card>
         )}
       </div>
+
+      <WorkBlockFormDialog
+        open={showEdit}
+        onOpenChange={setShowEdit}
+        title={`Edit ${wb.name}`}
+        submitLabel="Save New Version"
+        initialValue={{
+          name: wb.name,
+          description: wb.description,
+          inputs: wb.inputs,
+          outputs: wb.outputs,
+          executionHints: wb.executionHints ?? [],
+        }}
+        onSubmit={async (input) => {
+          const result = await updateWorkBlock({ id: wb.id, input });
+          if (result.data?.updateWorkBlock) {
+            await reexecute({ requestPolicy: "network-only" });
+          }
+        }}
+      />
     </div>
   );
 }

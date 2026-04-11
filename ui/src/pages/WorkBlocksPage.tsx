@@ -105,6 +105,8 @@ export function WorkBlocksPage() {
       <WorkBlockFormDialog
         open={showCreate}
         onOpenChange={setShowCreate}
+        title="Create Work Block"
+        submitLabel="Create Work Block"
         onSubmit={async (input) => {
           const result = await createWorkBlock({ input });
           if (result.data?.createWorkBlock) {

@@ -55,6 +55,7 @@ async def test_create_flow_with_nodes():
                     target_id=wb.entity_id,
                     target_version=wb.version,
                     alias="step1",
+                    execution_schedule="cron: 0 9 * * 1-5",
                     metadata={"position": {"x": 100, "y": 200}},
                 )
             ],
@@ -65,6 +66,7 @@ async def test_create_flow_with_nodes():
     assert doc.nodes[0].id == node_id
     assert doc.nodes[0].target_id == wb.entity_id
     assert doc.nodes[0].alias == "step1"
+    assert doc.nodes[0].execution_schedule == "cron: 0 9 * * 1-5"
     assert doc.nodes[0].metadata["position"] == {"x": 100, "y": 200}
 
 
@@ -243,7 +245,12 @@ async def test_flow_roundtrip_to_core():
         CreateFlowInput(
             name="Roundtrip",
             nodes=[
-                NodeReferenceInput(id=n1, target_id=wb.entity_id, target_version=1),
+                NodeReferenceInput(
+                    id=n1,
+                    target_id=wb.entity_id,
+                    target_version=1,
+                    execution_schedule="run independently when urgent work arrives",
+                ),
                 NodeReferenceInput(id=n2, target_id=wb.entity_id, target_version=1),
             ],
             edges=[EdgeInput(source_id=n1, target_id=n2)],
@@ -255,6 +262,7 @@ async def test_flow_roundtrip_to_core():
     assert core.name == "Roundtrip"
     assert len(core.nodes) == 2
     assert len(core.edges) == 1
+    assert core.nodes[0].execution_schedule == "run independently when urgent work arrives"
     assert core.metadata["canvas"] is True
 
 

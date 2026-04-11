@@ -1,3 +1,4 @@
+ - Openoma should be written as Openoma, not OpenOMA, unless it's in paths or code where case sensitivity is required, it can be written as openoma.
  - if .venv does not exist, create: uv venv .venv. 
  - Activate the venv with source .venv/bin/activate.
  - Use uv exclusively for package/project management (e.g., uv 

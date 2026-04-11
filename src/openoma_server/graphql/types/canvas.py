@@ -7,6 +7,7 @@ import strawberry
 from openoma_server.graphql.types.canvas_layout import CanvasLayoutType
 from openoma_server.graphql.types.execution import (
     ExecutionEventType,
+    ExecutionOutcomeType,
     ExecutorInfoType,
     FlowExecutionType,
 )
@@ -31,6 +32,7 @@ class NodeExecutionStateType:
     node_reference_id: UUID
     block_execution_id: UUID | None = None
     state: str | None = None
+    outcome: ExecutionOutcomeType | None = None
     executor: ExecutorInfoType | None = None
     latest_event: ExecutionEventType | None = None
 

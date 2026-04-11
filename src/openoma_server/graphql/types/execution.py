@@ -46,6 +46,7 @@ class BlockExecutionType:
     node_reference_id: UUID
     work_block_id: UUID
     work_block_version: int
+    outcome: ExecutionOutcomeType | None
     state: str
     created_at: datetime
 

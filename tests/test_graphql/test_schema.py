@@ -53,6 +53,48 @@ query ListWorkBlocks($name: String, $limit: Int) {
 }
 """
 
+CREATE_BLANK_FLOW_DRAFT = """
+mutation CreateBlankFlowDraft($name: String!) {
+  createBlankFlowDraft(name: $name) {
+    draftId
+    name
+    nodes { id targetId targetVersion }
+  }
+}
+"""
+
+ADD_NODE_TO_DRAFT = """
+mutation AddNodeToDraft($draftId: UUID!, $node: NodeReferenceInput!) {
+  addNodeToDraft(draftId: $draftId, node: $node) {
+    draftId
+    nodes { id targetId targetVersion }
+  }
+}
+"""
+
+UPDATE_NODE_IN_DRAFT = """
+mutation UpdateNodeInDraft($draftId: UUID!, $nodeReferenceId: UUID!, $input: UpdateNodeInput!) {
+  updateNodeInDraft(draftId: $draftId, nodeReferenceId: $nodeReferenceId, input: $input) {
+    draftId
+    nodes { id targetId targetVersion alias executionSchedule }
+  }
+}
+"""
+
+UPDATE_EDGE_IN_DRAFT = """
+mutation UpdateEdgeInDraft($draftId: UUID!, $sourceId: UUID, $targetId: UUID!, $edge: EdgeInput!) {
+  updateEdgeInDraft(draftId: $draftId, sourceId: $sourceId, targetId: $targetId, edge: $edge) {
+    draftId
+    edges {
+      sourceId
+      targetId
+      condition { description predicate metadata }
+      portMappings { sourcePort targetPort }
+    }
+  }
+}
+"""
+
 CREATE_FLOW = """
 mutation CreateFlow($input: CreateFlowInput!) {
   createFlow(input: $input) {
@@ -64,6 +106,7 @@ mutation CreateFlow($input: CreateFlowInput!) {
       targetId
       targetVersion
       alias
+      executionSchedule
       metadata
     }
     edges {
@@ -214,6 +257,127 @@ async def test_list_work_blocks_graphql():
     assert len(result.data["workBlocks"]) >= 2
 
 
+async def test_update_node_in_draft_graphql_replaces_work_block_version():
+    create_result = await schema.execute(
+        CREATE_WORK_BLOCK,
+        variable_values={"input": {"name": "Draft Replace"}},
+    )
+    wb_id = create_result.data["createWorkBlock"]["id"]
+
+    update_result = await schema.execute(
+        UPDATE_WORK_BLOCK,
+        variable_values={
+            "id": wb_id,
+            "input": {"description": "Version 2"},
+        },
+    )
+    assert update_result.errors is None
+    assert update_result.data["updateWorkBlock"]["version"] == 2
+
+    draft_result = await schema.execute(
+        CREATE_BLANK_FLOW_DRAFT,
+        variable_values={"name": "Draft Replace Flow"},
+    )
+    assert draft_result.errors is None
+    draft_id = draft_result.data["createBlankFlowDraft"]["draftId"]
+
+    import uuid
+
+    node_id = str(uuid.uuid4())
+    add_result = await schema.execute(
+        ADD_NODE_TO_DRAFT,
+        variable_values={
+            "draftId": draft_id,
+            "node": {
+                "id": node_id,
+                "targetId": wb_id,
+                "targetVersion": 1,
+            },
+        },
+    )
+    assert add_result.errors is None
+
+    replace_result = await schema.execute(
+        UPDATE_NODE_IN_DRAFT,
+        variable_values={
+            "draftId": draft_id,
+            "nodeReferenceId": node_id,
+            "input": {"targetId": wb_id, "targetVersion": 2},
+        },
+    )
+    assert replace_result.errors is None
+    node = replace_result.data["updateNodeInDraft"]["nodes"][0]
+    assert node["targetId"] == wb_id
+    assert node["targetVersion"] == 2
+
+
+async def test_update_edge_in_draft_graphql():
+    wb_result = await schema.execute(
+        CREATE_WORK_BLOCK,
+        variable_values={"input": {"name": "Edge Block"}},
+    )
+    wb_id = wb_result.data["createWorkBlock"]["id"]
+
+    draft_result = await schema.execute(
+        CREATE_BLANK_FLOW_DRAFT,
+        variable_values={"name": "Draft Edge Flow"},
+    )
+    draft_id = draft_result.data["createBlankFlowDraft"]["draftId"]
+
+    import uuid
+
+    n1 = str(uuid.uuid4())
+    n2 = str(uuid.uuid4())
+    await schema.execute(
+        ADD_NODE_TO_DRAFT,
+        variable_values={
+            "draftId": draft_id,
+            "node": {"id": n1, "targetId": wb_id, "targetVersion": 1},
+        },
+    )
+    await schema.execute(
+        ADD_NODE_TO_DRAFT,
+        variable_values={
+            "draftId": draft_id,
+            "node": {"id": n2, "targetId": wb_id, "targetVersion": 1},
+        },
+    )
+    await schema.execute(
+        """
+        mutation AddEdgeToDraft($draftId: UUID!, $edge: EdgeInput!) {
+          addEdgeToDraft(draftId: $draftId, edge: $edge) { draftId }
+        }
+        """,
+        variable_values={
+            "draftId": draft_id,
+            "edge": {"sourceId": n1, "targetId": n2},
+        },
+    )
+
+    result = await schema.execute(
+        UPDATE_EDGE_IN_DRAFT,
+        variable_values={
+            "draftId": draft_id,
+            "sourceId": n1,
+            "targetId": n2,
+            "edge": {
+                "sourceId": n1,
+                "targetId": n2,
+                "condition": {
+                    "description": "only if approved",
+                    "predicate": {"approved": True},
+                    "metadata": {"reviewer": "qa"},
+                },
+                "portMappings": [{"sourcePort": "decision", "targetPort": "input"}],
+            },
+        },
+    )
+    assert result.errors is None
+    edge = result.data["updateEdgeInDraft"]["edges"][0]
+    assert edge["condition"]["description"] == "only if approved"
+    assert edge["portMappings"][0]["sourcePort"] == "decision"
+
+
 async def test_create_flow_graphql():
     # Create a work block to reference
     wb_result = await schema.execute(
@@ -238,6 +402,7 @@ async def test_create_flow_graphql():
                         "targetId": wb_id,
                         "targetVersion": 1,
                         "alias": "step1",
+                        "executionSchedule": "cron: 0 9 * * 1-5",
                         "metadata": {"position": {"x": 0, "y": 0}},
                     },
                     {"id": n2, "targetId": wb_id, "targetVersion": 1, "alias": "step2"},
@@ -257,6 +422,7 @@ async def test_create_flow_graphql():
     assert data["name"] == "Test Flow"
     assert len(data["nodes"]) == 2
     assert len(data["edges"]) == 1
+    assert data["nodes"][0]["executionSchedule"] == "cron: 0 9 * * 1-5"
     assert data["nodes"][0]["metadata"]["position"] == {"x": 0, "y": 0}
 
 

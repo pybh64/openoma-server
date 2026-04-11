@@ -78,10 +78,14 @@ async def test_block_execution_full_lifecycle():
     # Produce outcome
     doc = await produce_block_outcome(eid, ExecutionOutcome(value={"approved": True}))
     assert doc.state == "in_progress"
+    assert doc.outcome is not None
+    assert doc.outcome.value == {"approved": True}
 
     # Complete
     doc = await complete_block_execution(eid)
     assert doc.state == "completed"
+    assert doc.outcome is not None
+    assert doc.outcome.value == {"approved": True}
 
     # Verify event stream
     events = await get_events(eid)

@@ -70,6 +70,7 @@ class BlockExecutionDoc(Document):
     node_reference_id: UUID
     work_block_id: UUID
     work_block_version: int
+    outcome: ExecutionOutcomeDoc | None = None
     state: str = ExecutionState.PENDING.value
     created_at: datetime = datetime.now(UTC)
 
@@ -89,6 +90,7 @@ class BlockExecutionDoc(Document):
             node_reference_id=self.node_reference_id,
             work_block_id=self.work_block_id,
             work_block_version=self.work_block_version,
+            outcome=execution_outcome_from_doc(self.outcome) if self.outcome else None,
             state=ExecutionState(self.state),
             created_at=self.created_at,
         )
@@ -101,6 +103,7 @@ class BlockExecutionDoc(Document):
             node_reference_id=be.node_reference_id,
             work_block_id=be.work_block_id,
             work_block_version=be.work_block_version,
+            outcome=execution_outcome_to_doc(be.outcome) if be.outcome else None,
             state=be.state.value,
             created_at=be.created_at,
         )

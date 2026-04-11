@@ -1,4 +1,5 @@
 import {
+  Plus,
   Save,
   Trash2,
   Upload,
@@ -20,6 +21,7 @@ interface DraftToolbarProps {
   onPublish: () => void;
   onDiscard: () => void;
   onSavePositions: () => void;
+  onOpenBlockLibrary: () => void;
   publishing?: boolean;
 }
 
@@ -31,6 +33,7 @@ export function DraftToolbar({
   onPublish,
   onDiscard,
   onSavePositions,
+  onOpenBlockLibrary,
   publishing,
 }: DraftToolbarProps) {
   const {
@@ -39,7 +42,6 @@ export function DraftToolbar({
     searchPanelOpen,
     toggleMinimap,
     toggleGrid,
-    setSearchPanelOpen,
   } = useCanvasStore();
 
   return (
@@ -58,7 +60,14 @@ export function DraftToolbar({
       <div className="flex-1" />
 
       {/* Canvas tools */}
-      <ToolButton icon={Search} label="Add Work Block" active={searchPanelOpen} onClick={() => setSearchPanelOpen(!searchPanelOpen)} />
+      <Button
+        variant={searchPanelOpen ? "secondary" : "outline"}
+        size="sm"
+        onClick={onOpenBlockLibrary}
+      >
+        <Plus className="h-3.5 w-3.5 mr-1" /> Add Block
+      </Button>
+      <ToolButton icon={Search} label="Block Library" active={searchPanelOpen} onClick={onOpenBlockLibrary} />
       <ToolButton icon={Grid3X3} label="Toggle Grid" active={showGrid} onClick={toggleGrid} />
       <ToolButton icon={Map} label="Toggle Minimap" active={showMinimap} onClick={toggleMinimap} />
 

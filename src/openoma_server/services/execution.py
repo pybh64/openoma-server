@@ -23,6 +23,7 @@ from openoma.execution.types import (
 )
 
 from openoma_server.auth.context import CurrentUser
+from openoma_server.models.converters import execution_outcome_to_doc
 from openoma_server.models.execution import (
     BlockExecutionDoc,
     ContractExecutionDoc,
@@ -108,12 +109,14 @@ async def _refresh_block_state(execution_id: UUID) -> BlockExecutionDoc:
     event_docs = await get_events(execution_id)
     events = [e.to_core() for e in event_docs]
     state = derive_block_state(events)
+    latest_outcome = next((event.outcome for event in reversed(events) if event.outcome), None)
 
     doc = await BlockExecutionDoc.find_one(BlockExecutionDoc.execution_id == execution_id)
     if doc is None:
         raise ValueError(f"BlockExecution {execution_id} not found")
 
     doc.state = state.value
+    doc.outcome = execution_outcome_to_doc(latest_outcome) if latest_outcome else None
     await doc.save()
     return doc
 

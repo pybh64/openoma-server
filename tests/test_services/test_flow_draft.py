@@ -6,11 +6,13 @@ import pytest
 
 from openoma_server.auth.context import CurrentUser
 from openoma_server.graphql.inputs.flow import (
+    ConditionInput,
     CreateFlowInput,
     EdgeInput,
     NodeReferenceInput,
+    PortMappingInput,
 )
-from openoma_server.graphql.inputs.work_block import CreateWorkBlockInput
+from openoma_server.graphql.inputs.work_block import CreateWorkBlockInput, UpdateWorkBlockInput
 from openoma_server.services.flow import create_flow
 from openoma_server.services.flow_draft import (
     add_edge_to_draft,
@@ -23,11 +25,12 @@ from openoma_server.services.flow_draft import (
     publish_draft,
     remove_edge_from_draft,
     remove_node_from_draft,
+    update_edge_in_draft,
     update_node_in_draft,
     update_node_positions,
     update_viewport,
 )
-from openoma_server.services.work_block import create_work_block
+from openoma_server.services.work_block import create_work_block, update_work_block
 
 pytestmark = pytest.mark.asyncio
 
@@ -101,11 +104,15 @@ async def test_add_node_to_draft():
     draft = await create_blank_draft("Node Draft", USER)
 
     node_input = NodeReferenceInput(
-        target_id=wb.entity_id, target_version=wb.version, alias="step1"
+        target_id=wb.entity_id,
+        target_version=wb.version,
+        alias="step1",
+        execution_schedule="cron: 0 9 * * 1-5",
     )
     updated = await add_node_to_draft(draft.draft_id, node_input)
     assert len(updated.nodes) == 1
     assert updated.nodes[0].alias == "step1"
+    assert updated.nodes[0].execution_schedule == "cron: 0 9 * * 1-5"
     assert updated.nodes[0].target_id == wb.entity_id
     # id should be auto-generated
     assert updated.nodes[0].id is not None
@@ -156,16 +163,60 @@ async def test_update_node_in_draft():
     node_id = draft.nodes[0].id
 
     draft = await update_node_in_draft(
-        draft.draft_id, node_id, alias="new-alias", metadata={"key": "val"}
+        draft.draft_id,
+        node_id,
+        alias="new-alias",
+        execution_schedule="run independently after triage",
+        metadata={"key": "val"},
     )
     assert draft.nodes[0].alias == "new-alias"
+    assert draft.nodes[0].execution_schedule == "run independently after triage"
     assert draft.nodes[0].metadata == {"key": "val"}
+
+
+async def test_update_node_in_draft_replaces_target_version():
+    wb = await _make_work_block("Versioned Block")
+    wb_v2 = await update_work_block(
+        wb.entity_id,
+        UpdateWorkBlockInput(description="Updated version"),
+        USER,
+    )
+    draft = await create_blank_draft("Replace Node", USER)
+
+    node_input = NodeReferenceInput(target_id=wb.entity_id, target_version=wb.version)
+    draft = await add_node_to_draft(draft.draft_id, node_input)
+    node_id = draft.nodes[0].id
+
+    draft = await update_node_in_draft(
+        draft.draft_id,
+        node_id,
+        target_version=wb_v2.version,
+    )
+
+    assert draft.nodes[0].target_id == wb.entity_id
+    assert draft.nodes[0].target_version == wb_v2.version
 
 
 async def test_update_node_not_found():
     draft = await create_blank_draft("Empty", USER)
     with pytest.raises(ValueError, match="not found in draft"):
         await update_node_in_draft(draft.draft_id, uuid4(), alias="x")
+
+
+async def test_update_node_rejects_missing_work_block_version():
+    wb = await _make_work_block("Missing Version")
+    draft = await create_blank_draft("Missing Target", USER)
+    draft = await add_node_to_draft(
+        draft.draft_id,
+        NodeReferenceInput(target_id=wb.entity_id, target_version=wb.version),
+    )
+
+    with pytest.raises(ValueError, match="WorkBlock .* version 99 not found"):
+        await update_node_in_draft(
+            draft.draft_id,
+            draft.nodes[0].id,
+            target_version=99,
+        )
 
 
 # ── Granular edge operations ─────────────────────────────────────
@@ -241,6 +292,45 @@ async def test_remove_edge_from_draft():
 
     draft = await remove_edge_from_draft(draft.draft_id, n1_id, n2_id)
     assert len(draft.edges) == 0
+
+
+async def test_update_edge_in_draft():
+    wb = await _make_work_block()
+    draft = await create_blank_draft("Update Edge", USER)
+
+    draft = await add_node_to_draft(
+        draft.draft_id,
+        NodeReferenceInput(target_id=wb.entity_id, target_version=1),
+    )
+    n1_id = draft.nodes[0].id
+    draft = await add_node_to_draft(
+        draft.draft_id,
+        NodeReferenceInput(target_id=wb.entity_id, target_version=1),
+    )
+    n2_id = draft.nodes[1].id
+
+    draft = await add_edge_to_draft(draft.draft_id, EdgeInput(source_id=n1_id, target_id=n2_id))
+    draft = await update_edge_in_draft(
+        draft.draft_id,
+        n1_id,
+        n2_id,
+        EdgeInput(
+            source_id=n1_id,
+            target_id=n2_id,
+            condition=ConditionInput(
+                description="route if approved",
+                predicate={"status": "approved"},
+                metadata={"source": "qa"},
+            ),
+            port_mappings=[
+                PortMappingInput(source_port="decision", target_port="input")
+            ],
+        ),
+    )
+
+    assert draft.edges[0].condition.description == "route if approved"
+    assert draft.edges[0].condition.predicate == {"status": "approved"}
+    assert draft.edges[0].port_mappings[0].source_port == "decision"
 
 
 # ── Layout operations ────────────────────────────────────────────

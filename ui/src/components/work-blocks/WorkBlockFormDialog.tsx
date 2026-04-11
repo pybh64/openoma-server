@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,15 @@ interface PortInput {
 interface WorkBlockFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  title?: string;
+  submitLabel?: string;
+  initialValue?: {
+    name: string;
+    description: string;
+    inputs: PortInput[];
+    outputs: PortInput[];
+    executionHints: string[];
+  };
   onSubmit: (input: {
     name: string;
     description: string;
@@ -30,25 +39,45 @@ interface WorkBlockFormDialogProps {
   }) => Promise<void>;
 }
 
-export function WorkBlockFormDialog({ open, onOpenChange, onSubmit }: WorkBlockFormDialogProps) {
+export function WorkBlockFormDialog({
+  open,
+  onOpenChange,
+  title = "Create Work Block",
+  submitLabel = "Create",
+  initialValue,
+  onSubmit,
+}: WorkBlockFormDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [inputs, setInputs] = useState<PortInput[]>([]);
   const [outputs, setOutputs] = useState<PortInput[]>([]);
   const [hints, setHints] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const applyInitialValue = useCallback(() => {
+    setName(initialValue?.name ?? "");
+    setDescription(initialValue?.description ?? "");
+    setInputs(initialValue?.inputs ?? []);
+    setOutputs(initialValue?.outputs ?? []);
+    setHints(initialValue?.executionHints?.join(", ") ?? "");
+  }, [initialValue]);
 
   const reset = () => {
-    setName("");
-    setDescription("");
-    setInputs([]);
-    setOutputs([]);
-    setHints("");
+    applyInitialValue();
   };
+
+  useEffect(() => {
+    if (open) {
+      applyInitialValue();
+      setError(null);
+    }
+  }, [applyInitialValue, open]);
 
   const handleSubmit = async () => {
     if (!name.trim()) return;
     setSubmitting(true);
+    setError(null);
     try {
       await onSubmit({
         name: name.trim(),
@@ -62,6 +91,8 @@ export function WorkBlockFormDialog({ open, onOpenChange, onSubmit }: WorkBlockF
       });
       reset();
       onOpenChange(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to save work block");
     } finally {
       setSubmitting(false);
     }
@@ -90,7 +121,7 @@ export function WorkBlockFormDialog({ open, onOpenChange, onSubmit }: WorkBlockF
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Work Block</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -135,9 +166,10 @@ export function WorkBlockFormDialog({ open, onOpenChange, onSubmit }: WorkBlockF
         </div>
 
         <DialogFooter>
+          {error && <p className="w-full text-xs text-destructive">{error}</p>}
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={!name.trim() || submitting}>
-            {submitting ? "Creating..." : "Create"}
+            {submitting ? "Saving..." : submitLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

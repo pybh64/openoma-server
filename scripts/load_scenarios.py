@@ -539,6 +539,7 @@ def scenario_flows(blocks: dict[str, str]) -> dict[str, str]:
                 "targetId": blocks["Ticket Triage"],
                 "targetVersion": 1,
                 "alias": "triage",
+                "executionSchedule": "cron: 0 9 * * 1-5",
                 "metadata": {"position": {"x": 100, "y": 300}},
             },
             {
@@ -546,6 +547,7 @@ def scenario_flows(blocks: dict[str, str]) -> dict[str, str]:
                 "targetId": blocks["Implementation"],
                 "targetVersion": 1,
                 "alias": "normal-impl",
+                "executionSchedule": "run when triage marks the ticket for standard process",
                 "metadata": {"position": {"x": 400, "y": 150}},
             },
             {
@@ -553,6 +555,7 @@ def scenario_flows(blocks: dict[str, str]) -> dict[str, str]:
                 "targetId": blocks["Implementation"],
                 "targetVersion": 1,
                 "alias": "fast-track-impl",
+                "executionSchedule": "run independently for urgent tickets after triage",
                 "metadata": {"position": {"x": 400, "y": 450}},
             },
             {
@@ -560,6 +563,7 @@ def scenario_flows(blocks: dict[str, str]) -> dict[str, str]:
                 "targetId": blocks["Code Review"],
                 "targetVersion": 1,
                 "alias": "review",
+                "executionSchedule": "run after either implementation path finishes",
                 "metadata": {"position": {"x": 700, "y": 300}},
             },
         ],
@@ -617,7 +621,7 @@ def scenario_flows(blocks: dict[str, str]) -> dict[str, str]:
     mutation CreateFlow($input: CreateFlowInput!) {
       createFlow(input: $input) {
         id name version description
-        nodes { id targetId targetVersion alias metadata }
+        nodes { id targetId targetVersion alias executionSchedule metadata }
         edges { sourceId targetId condition { description predicate } portMappings { sourcePort targetPort } }
         expectedOutcome { name }
         metadata
@@ -644,6 +648,13 @@ def scenario_flows(blocks: dict[str, str]) -> dict[str, str]:
         check("  2 conditional edges with predicates", len(cond_edges) == 2)
         mapped_edges = [e for e in flow["edges"] if e.get("portMappings")]
         check("  3 edges have port mappings", len(mapped_edges) == 3)
+        schedules = {n["alias"]: n["executionSchedule"] for n in flow["nodes"]}
+        check("  node execution schedules round-trip", schedules == {
+            "triage": "cron: 0 9 * * 1-5",
+            "normal-impl": "run when triage marks the ticket for standard process",
+            "fast-track-impl": "run independently for urgent tickets after triage",
+            "review": "run after either implementation path finishes",
+        })
 
     # --- 2b: Release Verification (assessment flow — 1 terminal node) ---
     release_input = {

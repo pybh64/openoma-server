@@ -3,8 +3,13 @@ import { gql } from "urql";
 const DRAFT_FIELDS = `
   draftId baseFlowId baseFlowVersion name description
   nodes {
-    id targetId targetVersion alias metadata
-    workBlock { id version name description executionHints inputs { name description required } outputs { name description required } }
+    id targetId targetVersion alias executionSchedule metadata
+    workBlock {
+      id version name description executionHints metadata
+      inputs { name description required schema metadata }
+      outputs { name description required schema metadata }
+      expectedOutcome { name description schema metadata }
+    }
   }
   edges {
     sourceId targetId
@@ -31,7 +36,7 @@ export const PUBLISH_FLOW_DRAFT = gql`
   mutation PublishFlowDraft($draftId: UUID!) {
     publishFlowDraft(draftId: $draftId) {
       id version name description
-      nodes { id targetId targetVersion alias }
+      nodes { id targetId targetVersion alias executionSchedule }
       edges { sourceId targetId }
     }
   }
@@ -67,6 +72,12 @@ export const REMOVE_EDGE_FROM_DRAFT = gql`
   }
 `;
 
+export const UPDATE_EDGE_IN_DRAFT = gql`
+  mutation UpdateEdgeInDraft($draftId: UUID!, $sourceId: UUID, $targetId: UUID!, $edge: EdgeInput!) {
+    updateEdgeInDraft(draftId: $draftId, sourceId: $sourceId, targetId: $targetId, edge: $edge) { ${DRAFT_FIELDS} }
+  }
+`;
+
 export const UPDATE_NODE_POSITIONS = gql`
   mutation UpdateNodePositions($draftId: UUID!, $positions: [NodePositionInput!]!) {
     updateNodePositions(draftId: $draftId, positions: $positions) { ${DRAFT_FIELDS} }
@@ -76,5 +87,13 @@ export const UPDATE_NODE_POSITIONS = gql`
 export const UPDATE_VIEWPORT = gql`
   mutation UpdateViewport($draftId: UUID!, $viewport: JSON!) {
     updateViewport(draftId: $draftId, viewport: $viewport) { ${DRAFT_FIELDS} }
+  }
+`;
+
+export const UPDATE_NODE_IN_DRAFT = gql`
+  mutation UpdateNodeInDraft($draftId: UUID!, $nodeReferenceId: UUID!, $input: UpdateNodeInput!) {
+    updateNodeInDraft(draftId: $draftId, nodeReferenceId: $nodeReferenceId, input: $input) {
+      ${DRAFT_FIELDS}
+    }
   }
 `;

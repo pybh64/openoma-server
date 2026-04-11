@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Plus, Search, FileText } from "lucide-react";
 import { CONTRACTS_QUERY } from "@/graphql/queries/contracts";
 import { CREATE_CONTRACT } from "@/graphql/mutations/contracts";
+import { ContractFormDialog } from "@/components/contracts/ContractFormDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +15,7 @@ import { shortId } from "@/lib/utils";
 
 export function ContractsPage() {
   const [search, setSearch] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
   const navigate = useNavigate();
   const [{ data, fetching }] = useQuery({
     query: CONTRACTS_QUERY,
@@ -23,24 +25,13 @@ export function ContractsPage() {
 
   const contracts = data?.contracts ?? [];
 
-  const handleNew = async () => {
-    const name = prompt("Contract name:");
-    if (!name) return;
-    const result = await createContract({
-      input: { name, description: "", owners: [], workFlows: [], subContracts: [], requiredOutcomes: [] },
-    });
-    if (result.data?.createContract) {
-      navigate(`/contracts/${result.data.createContract.id}`);
-    }
-  };
-
   return (
     <div>
       <PageHeader
         title="Contracts"
         description="Operational agreements composing flows and sub-contracts"
         actions={
-          <Button onClick={handleNew}>
+          <Button onClick={() => setShowCreate(true)}>
             <Plus className="h-4 w-4" /> New Contract
           </Button>
         }
@@ -64,7 +55,7 @@ export function ContractsPage() {
             icon={<FileText className="h-10 w-10" />}
             title="No contracts found"
             description={search ? "Try a different search term" : "Create your first contract to get started"}
-            action={!search && <Button onClick={handleNew}><Plus className="h-4 w-4" /> Create Contract</Button>}
+            action={!search && <Button onClick={() => setShowCreate(true)}><Plus className="h-4 w-4" /> Create Contract</Button>}
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -98,6 +89,19 @@ export function ContractsPage() {
           </div>
         )}
       </div>
+
+      <ContractFormDialog
+        open={showCreate}
+        onOpenChange={setShowCreate}
+        title="Create Contract"
+        submitLabel="Create Contract"
+        onSubmit={async (input) => {
+          const result = await createContract({ input });
+          if (result.data?.createContract) {
+            navigate(`/contracts/${result.data.createContract.id}`);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -28,6 +28,7 @@ class NodeReferenceType:
     target_id: UUID
     target_version: int
     alias: str | None
+    execution_schedule: str | None
     metadata: JSON
 
     @strawberry.field
