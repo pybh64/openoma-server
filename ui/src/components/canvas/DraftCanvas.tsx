@@ -1,4 +1,4 @@
-import { useMemo, useCallback, useEffect, useState, useRef } from "react";
+import { useMemo, useCallback, useEffect, useState } from "react";
 import {
   ReactFlow,
   Background,
@@ -57,10 +57,6 @@ export function DraftCanvas({
   const hasValidViewport =
     draft.viewport != null && typeof (draft.viewport as { zoom?: unknown }).zoom === "number";
   const [fitViewOnInit, setFitViewOnInit] = useState(() => !hasValidViewport);
-  const [isNodeDragging, setIsNodeDragging] = useState(false);
-  // Track whether onNodeClick just fired so we can ignore the immediately-following
-  // spurious onSelectionChange({nodes:[], edges:[]}) that React Flow v12 sometimes emits.
-  const justSelectedNodeRef = useRef(false);
 
   // Compute nodes AND edges together so selection styling stays in sync with draft changes.
   const { initialNodes, initialEdges } = useMemo(() => {
@@ -97,7 +93,6 @@ export function DraftCanvas({
 
   const handleNodeDragStart = useCallback(
     (_event: unknown, node: Node) => {
-      setIsNodeDragging(true);
       if (node.id === "__entry__") {
         onNodeSelect(null);
         onEdgeSelect?.(null);
@@ -121,53 +116,30 @@ export function DraftCanvas({
     [onConnect]
   );
 
-  // Guard against React Flow v12 bubbling pane click events from node/edge interactions.
-  // Only clear selection when the click truly originated on the canvas background.
-  const handlePaneClick = useCallback(
-    (event: unknown) => {
-      if (isNodeDragging) return;
-      const target = (event as { target?: Element }).target;
-      if (
-        target?.closest?.(".react-flow__node") ||
-        target?.closest?.(".react-flow__edge")
-      ) {
-        return;
-      }
-      onNodeSelect(null);
-      onEdgeSelect?.(null);
-    },
-    [isNodeDragging, onEdgeSelect, onNodeSelect],
-  );
+  const handlePaneClick = useCallback(() => {
+    onNodeSelect(null);
+    onEdgeSelect?.(null);
+  }, [onEdgeSelect, onNodeSelect]);
 
   const handleSelectionChange = useCallback(
     ({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
-      if (isNodeDragging) {
-        return;
-      }
-      const selectedWorkBlockNode = selectedNodes.find((selectedNode) => selectedNode.id !== "__entry__");
+      const selectedWorkBlockNode = selectedNodes.find((n) => n.id !== "__entry__");
       if (selectedWorkBlockNode) {
         onNodeSelect(selectedWorkBlockNode.id);
         onEdgeSelect?.(null);
-        return;
-      }
-      if (selectedEdges.length === 1) {
+      } else if (selectedEdges.length === 1) {
         onNodeSelect(null);
         onEdgeSelect?.({
           sourceId:
             selectedEdges[0].source === "__entry__" ? null : selectedEdges[0].source,
           targetId: selectedEdges[0].target,
         });
-        return;
+      } else {
+        onNodeSelect(null);
+        onEdgeSelect?.(null);
       }
-      // Empty selection — skip if onNodeClick just fired (avoids spurious deselect).
-      if (justSelectedNodeRef.current) {
-        justSelectedNodeRef.current = false;
-        return;
-      }
-      onNodeSelect(null);
-      onEdgeSelect?.(null);
     },
-    [isNodeDragging, onEdgeSelect, onNodeSelect],
+    [onEdgeSelect, onNodeSelect],
   );
 
   const handleNodeClick = useCallback(
@@ -177,7 +149,6 @@ export function DraftCanvas({
         onEdgeSelect?.(null);
         return;
       }
-      justSelectedNodeRef.current = true;
       onNodeSelect(node.id);
       onEdgeSelect?.(null);
     },
@@ -197,7 +168,6 @@ export function DraftCanvas({
 
   const handleNodeDragStop = useCallback(
     (_event: unknown, draggedNode: Node) => {
-      setIsNodeDragging(false);
       const positions: NodePositionData[] = nodes
         .filter((currentNode) => currentNode.id !== "__entry__")
         .map((currentNode) => {
@@ -247,7 +217,7 @@ export function DraftCanvas({
         nodesConnectable
         edgesFocusable
         elementsSelectable
-        selectNodesOnDrag={false}
+        nodeDragThreshold={2}
         selectionOnDrag={false}
         snapToGrid={snapToGrid}
         snapGrid={[gridSize, gridSize]}
